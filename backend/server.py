@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Cookie, Response, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -11,6 +11,13 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
+from io import BytesIO
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_RIGHT, TA_CENTER
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -529,6 +536,164 @@ async def get_dashboard_summary(request: Request, session_token: Optional[str] =
         active_jobs=active_jobs,
         job_breakdown=job_breakdown
     )
+
+# ============ Invoice Generation Route ============
+
+class InvoiceRequest(BaseModel):
+    job_id: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    invoice_number: Optional[str] = None
+    notes: Optional[str] = None
+
+@api_router.post("/invoices/generate")
+async def generate_invoice(
+    invoice_req: InvoiceRequest,
+    request: Request,
+    session_token: Optional[str] = Cookie(None)
+):
+    """Generate a PDF invoice for hours worked"""
+    user = await get_current_user(request, session_token)
+    
+    # Build query for hours logs
+    query = {"user_id": user.user_id}
+    if invoice_req.job_id:
+        query["job_id"] = invoice_req.job_id
+    if invoice_req.start_date or invoice_req.end_date:
+        date_query = {}
+        if invoice_req.start_date:
+            date_query["$gte"] = invoice_req.start_date
+        if invoice_req.end_date:
+            date_query["$lte"] = invoice_req.end_date
+        query["date"] = date_query
+    
+    # Fetch hours logs
+    hours_logs = await db.hours_logs.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
+    
+    if not hours_logs:
+        raise HTTPException(status_code=404, detail="No hours logs found for the specified criteria")
+    
+    # Create PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    
+    # Container for the 'Flowable' objects
+    elements = []
+    
+    # Define styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#344E41'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#344E41'),
+        spaceAfter=12
+    )
+    
+    normal_style = styles['Normal']
+    
+    # Invoice header
+    invoice_num = invoice_req.invoice_number or f"INV-{datetime.now().strftime('%Y%m%d')}"
+    elements.append(Paragraph(f"INVOICE", title_style))
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Invoice info
+    invoice_data = [
+        [Paragraph(f"<b>Invoice Number:</b> {invoice_num}", normal_style)],
+        [Paragraph(f"<b>Date:</b> {datetime.now().strftime('%B %d, %Y')}", normal_style)],
+        [Paragraph(f"<b>From:</b> {user.name}", normal_style)],
+        [Paragraph(f"<b>Email:</b> {user.email}", normal_style)],
+    ]
+    
+    info_table = Table(invoice_data, colWidths=[6*inch])
+    info_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Hours breakdown
+    elements.append(Paragraph("Hours Worked", heading_style))
+    
+    # Prepare table data
+    table_data = [['Date', 'Job', 'Hours', 'Rate', 'Amount']]
+    total_amount = 0
+    
+    for log in hours_logs:
+        table_data.append([
+            datetime.fromisoformat(log['date']).strftime('%m/%d/%Y') if isinstance(log['date'], str) else log['date'].strftime('%m/%d/%Y'),
+            log['job_name'],
+            str(log['hours_worked']),
+            f"${log['hourly_rate']:.2f}",
+            f"${log['calculated_pay']:.2f}"
+        ])
+        total_amount += log['calculated_pay']
+    
+    # Add total row
+    table_data.append(['', '', '', 'TOTAL:', f"${total_amount:.2f}"])
+    
+    # Create table
+    hours_table = Table(table_data, colWidths=[1*inch, 2*inch, 0.8*inch, 0.9*inch, 1*inch])
+    hours_table.setStyle(TableStyle([
+        # Header row
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#344E41')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        
+        # Data rows
+        ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -2), 9),
+        ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+        ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -2), 0.5, colors.HexColor('#EAE6DF')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#FDFCFB')]),
+        
+        # Total row
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 11),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F5F3EE')),
+        ('TOPPADDING', (0, -1), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, -1), (-1, -1), 12),
+        ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#344E41')),
+    ]))
+    elements.append(hours_table)
+    
+    # Notes section
+    if invoice_req.notes:
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Paragraph("Notes", heading_style))
+        elements.append(Paragraph(invoice_req.notes, normal_style))
+    
+    # Build PDF
+    doc.build(elements)
+    
+    # Get PDF data
+    pdf_data = buffer.getvalue()
+    buffer.close()
+    
+    # Return as downloadable file
+    filename = f"invoice_{invoice_num}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 
 # Include the router in the main app
 app.include_router(api_router)

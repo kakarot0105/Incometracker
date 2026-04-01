@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import Hours from "./pages/Hours";
 import Payments from "./pages/Payments";
+import Invoices from "./pages/Invoices";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 
@@ -26,6 +27,7 @@ function AppRouter() {
         <Route path="jobs" element={<Jobs />} />
         <Route path="hours" element={<Hours />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="invoices" element={<Invoices />} />
       </Route>
     </Routes>
   );

@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Briefcase, Clock, CreditCard, LayoutDashboard, LogOut } from 'lucide-react';
+import { Briefcase, Clock, CreditCard, LayoutDashboard, FileText, LogOut } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 
@@ -27,6 +27,7 @@ export default function Layout() {
     { path: '/jobs', icon: Briefcase, label: 'Jobs' },
     { path: '/hours', icon: Clock, label: 'Hours' },
     { path: '/payments', icon: CreditCard, label: 'Payments' },
+    { path: '/invoices', icon: FileText, label: 'Invoices' },
   ];
   
   return (
