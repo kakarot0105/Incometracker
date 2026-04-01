@@ -1,0 +1,81 @@
+{
+  "theme": "Light",
+  "archetype": "1 (Organic & Earthy)",
+  "emotional_tone": "Grounded, calm, organized, and trustworthy.",
+  "reasoning": "A freelance salary tracker involves managing multiple income streams and pending payments, which can be stressful. We avoid the typical 'fintech blue' or 'crypto dark mode' in favor of an Organic & Earthy palette. Warm tones and natural greens create a sense of steady growth, calm, and approachability.",
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "Manrope",
+    "strategy": "Outfit provides a modern, slightly geometric structure to numbers and dashboard metrics, while Manrope ensures absolute legibility for dense tables and logs. We employ tight tracking on large metric numbers to create a 'Pro' feel.",
+    "scales": {
+      "h1": "text-4xl font-semibold tracking-tight",
+      "h2": "text-2xl font-medium tracking-tight",
+      "h3": "text-xl font-medium",
+      "h4": "text-lg font-medium",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm font-medium",
+      "metric": "text-5xl font-light tracking-tighter"
+    }
+  },
+  "colors": {
+    "background": "#FDFCFB",
+    "surface": "#FFFFFF",
+    "primary": "#344E41",
+    "primary_hover": "#2B3A28",
+    "secondary": "#E07A5F",
+    "secondary_hover": "#D16B51",
+    "accent": "#A3B18A",
+    "text_primary": "#1F2937",
+    "text_secondary": "#5C6B61",
+    "border": "#EAE6DF",
+    "success": "#3A5A40",
+    "warning": "#E07A5F"
+  },
+  "spacing_and_layout": {
+    "grid_system": "Control Room Grid",
+    "gap": "gap-6",
+    "card_padding": "p-6",
+    "section_spacing": "py-12",
+    "rules": [
+      "Use 'border-collapse' style or crisp 1px borders (#EAE6DF) for dashboard widgets rather than heavy shadows.",
+      "Grid widgets must use h-full to stretch and align perfectly.",
+      "Use generosity in whitespace (p-8 on main containers) to prevent cognitive overload."
+    ]
+  },
+  "components": {
+    "surface_strategy": "Neumorphism/Tactile mix: Flat white backgrounds with a crisp 1px border. No shadows on resting state, but a subtle '-translate-y-[2px]' and 'shadow-sm' on hover for interactive cards.",
+    "buttons": "Primary buttons use Deep Forest Green (#344E41) with white text. Secondary buttons use transparent backgrounds with 1px border and text_primary.",
+    "charts": "Use Recharts. Ensure tooltips have a white background, 1px border, and no heavy drop shadow to match the organic flat theme.",
+    "tables": "Left-aligned headers, numeric columns right-aligned. Use alternating row background colors (bg-[#FDFCFB]/50) for easier scanning."
+  },
+  "motion": {
+    "hover_states": "All interactive elements transition transform 0.2s ease, opacity 0.2s ease.",
+    "page_transitions": "Subtle fade-in and slide-up (translate-y-2 to 0) for dashboard widgets on mount, staggered."
+  },
+  "media": {
+    "image_urls": {
+      "avatar": {
+        "url": "https://images.unsplash.com/photo-1701010886917-d46828106845?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzV8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBmcmVlbGFuY2VyJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1MDc3Nzk4fDA&ixlib=rb-4.1.0&q=85",
+        "description": "User profile avatar",
+        "category": "profile"
+      },
+      "empty_state_bg": {
+        "url": "https://images.pexels.com/photos/7745560/pexels-photo-7745560.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Clean minimalist workspace for empty states or login background",
+        "category": "background"
+      }
+    }
+  },
+  "instructions_to_main_agent": [
+    "Implement Google Authentication (can be mocked with a 'Sign in with Google' button that sets a mock user session).",
+    "Build a Left Sidebar or Top Navigation layout for the Dashboard.",
+    "Dashboard must contain 4 summary metric cards (Earnings, Balance, Hours, Active Jobs).",
+    "Implement a Job Management section: Add, Edit, Delete jobs (Name, Hourly Rate).",
+    "Implement an Hours Logging form (Select Job, Date, Hours). Auto-calculate Pay = Hours * Job Rate.",
+    "Implement a Payments received section to log cash inflows. Balance = Total Pay - Total Payments Received.",
+    "Use Recharts to show Job-wise earnings breakdown (e.g., Bar chart).",
+    "Ensure all interactive elements have 'data-testid' attributes.",
+    "Install and use @phosphor-icons/react for iconography.",
+    "Use standard HTML structure but leverage Shadcn UI heavily for forms, dialogs, selects, and tables."
+  ]
+}
