@@ -20,34 +20,24 @@ jobs:
         password: ${{ secrets.VPS_PASSWORD }}
         command_timeout: 15m
         script: |
-          # Install Node.js 20 if not present or too old
-          if ! command -v node &> /dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 18 ]; then
-            echo "=== Installing Node.js 20 ==="
-            curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-            apt-get install -y nodejs
-          fi
-          echo "Node: $(node -v), npm: $(npm -v)"
-          
           cd /root/Incometracker
           git pull origin main
           
           # Update backend
-          echo "=== Backend ==="
           cd backend
           source venv/bin/activate 2>/dev/null || true
           pip install -r requirements.txt 2>/dev/null || true
           pm2 restart backend 2>/dev/null || true
           
           # Build frontend
-          echo "=== Frontend ==="
           cd ../frontend
           npm install --legacy-peer-deps
           CI=false npm run build
           
-          # Verify
-          echo "=== Build output ==="
-          ls -la build/static/js/
+          # Copy build to Nginx web root
+          rsync -av --delete /root/Incometracker/frontend/build/ /var/www/trackyourbucks/
           
           # Reload Nginx
-          systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null || true
-          echo "✅ Done!"
+          systemctl reload nginx
+          
+          echo "✅ Deployment complete!"
