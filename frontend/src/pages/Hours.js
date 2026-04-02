@@ -185,17 +185,26 @@ export default function Hours() {
   };
   
   const handleDelete = async (logId) => {
-    if (!window.confirm('Are you sure you want to delete this hours log?')) return;
+    console.log('Delete clicked for log:', logId);
+    
+    if (!window.confirm('Are you sure you want to delete this hours log?')) {
+      console.log('User cancelled delete');
+      return;
+    }
+    
+    console.log('Attempting to delete log:', logId);
     
     try {
-      await axios.delete(`${BACKEND_URL}/api/hours/${logId}`, {
+      const response = await axios.delete(`${BACKEND_URL}/api/hours/${logId}`, {
         withCredentials: true
       });
+      console.log('Delete successful:', response.data);
       toast.success('Hours log deleted successfully');
-      fetchData();
+      await fetchData();
     } catch (error) {
       console.error('Failed to delete hours log:', error);
-      toast.error('Failed to delete hours log');
+      console.error('Error response:', error.response?.data);
+      toast.error(`Failed to delete: ${error.response?.data?.detail || error.message}`);
     }
   };
   
