@@ -13,16 +13,17 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 function AppRouter() {
   const location = useLocation();
-  
+
   // CRITICAL: Check URL fragment (not query params) for session_id synchronously during render
   // This prevents race conditions by processing session_id BEFORE checking existing session_token
   if (location.hash?.includes('session_id=')) {
     return <AuthCallback />;
   }
-  
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="jobs" element={<Jobs />} />
