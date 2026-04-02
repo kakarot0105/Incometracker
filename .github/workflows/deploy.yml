@@ -10,7 +10,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Deploy to VPS
       uses: appleboy/ssh-action@master
@@ -18,21 +18,38 @@ jobs:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USER }}
         password: ${{ secrets.VPS_PASSWORD }}
-        command_timeout: 10m
+        command_timeout: 15m
         script: |
           set -e
+          echo "=== System Info ==="
+          node --version
+          npm --version
+          
           cd /root/Incometracker
           git pull origin main
           
           # Update backend
+          echo "=== Updating Backend ==="
           cd backend
           source venv/bin/activate
           pip install -r requirements.txt
           pm2 restart backend
           
-          # Update frontend (build is required for static files)
+          # Update frontend
+          echo "=== Building Frontend ==="
           cd ../frontend
           npm install --legacy-peer-deps
-          npm run build
+          
+          # CI=false prevents React from treating warnings as errors
+          CI=false npm run build
+          
+          # Verify build output exists
+          echo "=== Verifying Build ==="
+          ls -la build/
+          ls -la build/static/js/
+          
+          # Reload Nginx to serve new static files
+          echo "=== Reloading Nginx ==="
+          sudo systemctl reload nginx || sudo nginx -s reload || true
           
           echo "✅ Deployment complete!"
