@@ -31,8 +31,11 @@ export default function Payments() {
   // Weekly batch payment form
   const [weeklyForm, setWeeklyForm] = useState({
     job_id: '',
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     total_amount: '',
-    week_start: getMonday(new Date()).toISOString().split('T')[0],
+    calculated_amount: 0,
+    hours_breakdown: [],
     notes: ''
   });
   
@@ -42,6 +45,38 @@ export default function Payments() {
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(d.setDate(diff));
   }
+  
+  // Calculate payment amount based on logged hours
+  useEffect(() => {
+    const calculatePayment = async () => {
+      if (weeklyForm.job_id && weeklyForm.start_date && weeklyForm.end_date) {
+        try {
+          const response = await axios.get(`${BACKEND_URL}/api/hours`, {
+            withCredentials: true
+          });
+          
+          const hoursLogs = response.data.filter(log => {
+            return log.job_id === weeklyForm.job_id &&
+                   log.date >= weeklyForm.start_date &&
+                   log.date <= weeklyForm.end_date;
+          });
+          
+          const totalAmount = hoursLogs.reduce((sum, log) => sum + log.calculated_pay, 0);
+          
+          setWeeklyForm(prev => ({
+            ...prev,
+            calculated_amount: totalAmount,
+            total_amount: totalAmount.toFixed(2),
+            hours_breakdown: hoursLogs
+          }));
+        } catch (error) {
+          console.error('Failed to calculate payment:', error);
+        }
+      }
+    };
+    
+    calculatePayment();
+  }, [weeklyForm.job_id, weeklyForm.start_date, weeklyForm.end_date]);
   
   useEffect(() => {
     fetchData();
@@ -86,8 +121,10 @@ export default function Payments() {
           {
             job_id: weeklyForm.job_id || null,
             amount: parseFloat(weeklyForm.total_amount),
-            date: weeklyForm.week_start,
-            notes: weeklyForm.notes ? `Week of ${weeklyForm.week_start}: ${weeklyForm.notes}` : `Week of ${weeklyForm.week_start}`
+            date: weeklyForm.start_date,
+            notes: weeklyForm.notes ? 
+              `${weeklyForm.start_date} to ${weeklyForm.end_date}: ${weeklyForm.notes}` : 
+              `Payment for ${weeklyForm.start_date} to ${weeklyForm.end_date}`
           },
           { withCredentials: true }
         );
@@ -110,10 +147,16 @@ export default function Payments() {
       date: new Date().toISOString().split('T')[0],
       notes: '' 
     });
+    const today = new Date();
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + 6);
     setWeeklyForm({
       job_id: '',
+      start_date: today.toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0],
       total_amount: '',
-      week_start: getMonday(new Date()).toISOString().split('T')[0],
+      calculated_amount: 0,
+      hours_breakdown: [],
       notes: ''
     });
   };
@@ -323,45 +366,86 @@ export default function Payments() {
               <TabsContent value="weekly">
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <Label htmlFor="weekly_job_id" className="text-[#5C6B61] font-medium">Job (Optional)</Label>
+                    <Label htmlFor="weekly_job_id" className="text-[#5C6B61] font-medium">Job</Label>
                     <Select 
                       value={weeklyForm.job_id} 
                       onValueChange={(value) => setWeeklyForm({ ...weeklyForm, job_id: value })}
+                      required
                     >
                       <SelectTrigger 
                         id="weekly_job_id"
                         className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
                       >
-                        <SelectValue placeholder="Select a job (optional)" />
+                        <SelectValue placeholder="Select a job" />
                       </SelectTrigger>
                       <SelectContent className="bg-white border border-[#EAE6DF]">
                         {jobs.map((job) => (
                           <SelectItem key={job.job_id} value={job.job_id}>
-                            {job.job_name}
+                            {job.job_name} - ${job.hourly_rate.toFixed(2)}/hr
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   
-                  <div>
-                    <Label htmlFor="week_start" className="text-[#5C6B61] font-medium">Week Starting</Label>
-                    <Input
-                      id="week_start"
-                      type="date"
-                      value={weeklyForm.week_start}
-                      onChange={(e) => {
-                        const monday = getMonday(new Date(e.target.value));
-                        setWeeklyForm({ ...weeklyForm, week_start: monday.toISOString().split('T')[0] });
-                      }}
-                      required
-                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                    />
-                    <p className="text-sm text-[#5C6B61] mt-1">Week starts on Monday</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="start_date" className="text-[#5C6B61] font-medium">Start Date</Label>
+                      <Input
+                        id="start_date"
+                        type="date"
+                        value={weeklyForm.start_date}
+                        onChange={(e) => {
+                          const startDate = new Date(e.target.value);
+                          const endDate = new Date(startDate);
+                          endDate.setDate(startDate.getDate() + 6);
+                          setWeeklyForm({ 
+                            ...weeklyForm, 
+                            start_date: e.target.value,
+                            end_date: endDate.toISOString().split('T')[0]
+                          });
+                        }}
+                        required
+                        className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="end_date" className="text-[#5C6B61] font-medium">End Date</Label>
+                      <Input
+                        id="end_date"
+                        type="date"
+                        value={weeklyForm.end_date}
+                        onChange={(e) => setWeeklyForm({ ...weeklyForm, end_date: e.target.value })}
+                        required
+                        className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                      />
+                    </div>
                   </div>
                   
+                  {weeklyForm.hours_breakdown.length > 0 && (
+                    <div className="bg-[#F5F3EE] p-4 border-l-4 border-[#3A5A40]">
+                      <p className="text-sm font-medium text-[#344E41] mb-2">
+                        Hours Found: {weeklyForm.hours_breakdown.reduce((sum, log) => sum + log.hours_worked, 0)} hours
+                      </p>
+                      <div className="space-y-1">
+                        {weeklyForm.hours_breakdown.map((log, idx) => (
+                          <p key={idx} className="text-sm text-[#5C6B61]">
+                            {new Date(log.date).toLocaleDateString()}: {log.hours_worked}h × ${log.hourly_rate}/hr = ${log.calculated_pay.toFixed(2)}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
                   <div>
-                    <Label htmlFor="total_amount" className="text-[#5C6B61] font-medium">Total Amount ($)</Label>
+                    <Label htmlFor="total_amount" className="text-[#5C6B61] font-medium">
+                      Total Amount ($)
+                      {weeklyForm.calculated_amount > 0 && (
+                        <span className="text-[#3A5A40] font-semibold ml-2">
+                          (Auto-calculated: ${weeklyForm.calculated_amount.toFixed(2)})
+                        </span>
+                      )}
+                    </Label>
                     <Input
                       id="total_amount"
                       type="number"
@@ -370,9 +454,14 @@ export default function Payments() {
                       onChange={(e) => setWeeklyForm({ ...weeklyForm, total_amount: e.target.value })}
                       required
                       className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                      placeholder="2000.00"
+                      placeholder="0.00"
                     />
-                    <p className="text-sm text-[#5C6B61] mt-1">Payment received for the week</p>
+                    <p className="text-sm text-[#5C6B61] mt-1">
+                      {weeklyForm.calculated_amount > 0 
+                        ? 'Amount auto-calculated from logged hours (you can adjust if needed)'
+                        : 'Enter amount or log hours first to auto-calculate'
+                      }
+                    </p>
                   </div>
                   
                   <div>
@@ -400,7 +489,7 @@ export default function Payments() {
                       type="submit"
                       className="flex-1 bg-[#344E41] hover:bg-[#2B3A28] text-white"
                     >
-                      Record Weekly Payment
+                      Record Payment
                     </Button>
                   </div>
                 </form>
