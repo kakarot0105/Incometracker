@@ -18,14 +18,21 @@ jobs:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USER }}
         password: ${{ secrets.VPS_PASSWORD }}
+        command_timeout: 10m
         script: |
+          set -e
           cd /root/Incometracker
           git pull origin main
+          
+          # Update backend
           cd backend
           source venv/bin/activate
           pip install -r requirements.txt
           pm2 restart backend
+          
+          # Update frontend (build is required for static files)
           cd ../frontend
           npm install --legacy-peer-deps
-          pm2 restart frontend
+          npm run build
+          
           echo "✅ Deployment complete!"
