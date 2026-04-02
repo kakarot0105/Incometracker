@@ -1,0 +1,24 @@
+name: Keep Render App Awake
+
+on:
+  schedule:
+    # Runs every 14 minutes
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  keep-awake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend
+        run: |
+          curl -I https://incometracker-backend.onrender.com || true
+          echo "Backend pinged at $(date)"
+      
+      - name: Ping Frontend
+        run: |
+          curl -I https://incometracker-frontend.onrender.com || true
+          echo "Frontend pinged at $(date)"
+      
+      - name: Wait 30 seconds
+        run: sleep 30
