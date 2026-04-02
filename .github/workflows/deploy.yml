@@ -34,8 +34,8 @@ jobs:
           npm install --legacy-peer-deps
           CI=false npm run build
           
-          # Copy build to Nginx web root
-          rsync -av --delete /root/Incometracker/frontend/build/ /var/www/trackyourbucks/
+          # Sync build to Nginx web root
+          rsync -av --delete build/ /var/www/trackyourbucks/
           
           # Reload Nginx
           systemctl reload nginx
