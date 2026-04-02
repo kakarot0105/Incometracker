@@ -11,45 +11,61 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
-    - name: Deploy to VPS
+
+    # Build frontend on GitHub's servers (fast, reliable, no Node needed on VPS)
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package.json
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: npm install --legacy-peer-deps
+
+    - name: Build frontend
+      working-directory: frontend
+      env:
+        CI: false
+      run: npm run build
+
+    # Deploy built files + backend to VPS
+    - name: Copy frontend build to VPS
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        password: ${{ secrets.VPS_PASSWORD }}
+        source: "frontend/build/*"
+        target: "/root/Incometracker/frontend/build"
+        strip_components: 2
+        overwrite: true
+        rm: true
+
+    - name: Deploy backend & reload Nginx
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USER }}
         password: ${{ secrets.VPS_PASSWORD }}
-        command_timeout: 15m
+        command_timeout: 10m
         script: |
           set -e
-          echo "=== System Info ==="
-          node --version
-          npm --version
-          
           cd /root/Incometracker
           git pull origin main
           
           # Update backend
-          echo "=== Updating Backend ==="
           cd backend
           source venv/bin/activate
           pip install -r requirements.txt
           pm2 restart backend
           
-          # Update frontend
-          echo "=== Building Frontend ==="
-          cd ../frontend
-          npm install --legacy-peer-deps
-          
-          # CI=false prevents React from treating warnings as errors
-          CI=false npm run build
-          
-          # Verify build output exists
-          echo "=== Verifying Build ==="
-          ls -la build/
-          ls -la build/static/js/
+          # Verify frontend build exists
+          echo "=== Frontend build files ==="
+          ls -la /root/Incometracker/frontend/build/static/js/ || echo "WARNING: No JS files found!"
           
           # Reload Nginx to serve new static files
-          echo "=== Reloading Nginx ==="
-          sudo systemctl reload nginx || sudo nginx -s reload || true
+          systemctl reload nginx || nginx -s reload || true
           
           echo "✅ Deployment complete!"
