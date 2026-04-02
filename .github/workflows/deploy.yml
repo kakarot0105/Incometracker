@@ -11,64 +11,43 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    # Build frontend on GitHub Actions
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@master
       with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: frontend/package.json
-
-    - name: Install frontend dependencies
-      working-directory: frontend
-      run: npm install --legacy-peer-deps
-
-    - name: Build frontend
-      working-directory: frontend
-      env:
-        CI: false
-      run: npm run build
-
-    # Install sshpass for password-based SSH/SCP
-    - name: Install sshpass
-      run: sudo apt-get install -y sshpass
-
-    # Transfer build files to VPS using rsync over SSH
-    - name: Deploy frontend build to VPS
-      env:
-        VPS_HOST: ${{ secrets.VPS_HOST }}
-        VPS_USER: ${{ secrets.VPS_USER }}
-        VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
-      run: |
-        sshpass -p "$VPS_PASSWORD" rsync -avz --delete \
-          -e "ssh -o StrictHostKeyChecking=no" \
-          frontend/build/ \
-          ${VPS_USER}@${VPS_HOST}:/root/Incometracker/frontend/build/
-
-    # Update backend and reload Nginx
-    - name: Update backend and reload Nginx
-      env:
-        VPS_HOST: ${{ secrets.VPS_HOST }}
-        VPS_USER: ${{ secrets.VPS_USER }}
-        VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
-      run: |
-        sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST} << 'EOF'
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        password: ${{ secrets.VPS_PASSWORD }}
+        command_timeout: 15m
+        script: |
+          # Install Node.js 20 if not present or too old
+          if ! command -v node &> /dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 18 ]; then
+            echo "=== Installing Node.js 20 ==="
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+            apt-get install -y nodejs
+          fi
+          echo "Node: $(node -v), npm: $(npm -v)"
+          
           cd /root/Incometracker
           git pull origin main
           
           # Update backend
+          echo "=== Backend ==="
           cd backend
           source venv/bin/activate 2>/dev/null || true
           pip install -r requirements.txt 2>/dev/null || true
           pm2 restart backend 2>/dev/null || true
           
-          # Verify frontend
-          echo "=== Frontend build files ==="
-          ls -la /root/Incometracker/frontend/build/static/js/ || echo "No JS!"
+          # Build frontend
+          echo "=== Frontend ==="
+          cd ../frontend
+          npm install --legacy-peer-deps
+          CI=false npm run build
+          
+          # Verify
+          echo "=== Build output ==="
+          ls -la build/static/js/
           
           # Reload Nginx
           systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null || true
-          
-          echo "✅ Deployment complete!"
-        EOF
+          echo "✅ Done!"
