@@ -916,6 +916,134 @@ async def generate_earnings_statement(
         footer_style
     ))
     
+# ============ Simple Monthly Spreadsheet Report ============
+
+@api_router.get("/reports/monthly-spreadsheet")
+async def generate_monthly_spreadsheet(
+    month: str,
+    request: Request,
+    session_token: Optional[str] = Cookie(None)
+):
+    """Generate a simple spreadsheet-style PDF for a specific month"""
+    user = await get_current_user(request, session_token)
+    
+    # Fetch hours logs for the month
+    hours_logs = await db.hours_logs.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).sort("date", 1).to_list(10000)
+    
+    # Filter for selected month
+    filtered_logs = [log for log in hours_logs if log['date'].startswith(month)]
+    
+    if not filtered_logs:
+        raise HTTPException(status_code=404, detail=f"No hours logged for {month}")
+    
+    # Create PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=50,
+        leftMargin=50,
+        topMargin=50,
+        bottomMargin=50
+    )
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    title_style = ParagraphStyle(
+        'Title',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#344E41'),
+        spaceAfter=20,
+        fontName='Helvetica-Bold'
+    )
+    
+    month_date = datetime.strptime(month + '-01', '%Y-%m-%d')
+    month_name = month_date.strftime('%B %Y')
+    
+    elements.append(Paragraph(f"TIMESHEET - {month_name}", title_style))
+    elements.append(Paragraph(f"{user.name}", styles['Normal']))
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Simple spreadsheet table
+    table_data = [['Date', 'Job', 'Hours', 'Rate', 'Amount']]
+    
+    total_hours = 0
+    total_amount = 0
+    
+    for log in filtered_logs:
+        date_str = log['date']
+        if isinstance(date_str, str):
+            date_obj = datetime.fromisoformat(date_str)
+        else:
+            date_obj = date_str
+        
+        table_data.append([
+            date_obj.strftime('%m/%d/%Y'),
+            log['job_name'],
+            f"{log['hours_worked']:.1f}",
+            f"${log['hourly_rate']:.2f}",
+            f"${log['calculated_pay']:.2f}"
+        ])
+        
+        total_hours += log['hours_worked']
+        total_amount += log['calculated_pay']
+    
+    # Add total row
+    table_data.append(['', 'TOTAL', f"{total_hours:.1f}", '', f"${total_amount:.2f}"])
+    
+    # Create table with simple styling
+    table = Table(table_data, colWidths=[1.2*inch, 2.5*inch, 0.8*inch, 1*inch, 1.2*inch])
+    table.setStyle(TableStyle([
+        # Header row
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#344E41')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 0), (-1, 0), 12),
+        
+        # Data rows
+        ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -2), 10),
+        ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+        ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -2), 1, colors.HexColor('#EAE6DF')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#FDFCFB')]),
+        ('TOPPADDING', (0, 1), (-1, -2), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, -2), 8),
+        
+        # Total row
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 12),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F5F3EE')),
+        ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#344E41')),
+        ('TOPPADDING', (0, -1), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, -1), (-1, -1), 12),
+    ]))
+    
+    elements.append(table)
+    
+    # Build PDF
+    doc.build(elements)
+    
+    pdf_data = buffer.getvalue()
+    buffer.close()
+    
+    filename = f"timesheet_{month_name.replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+    ))
+    
     # Build PDF
     doc.build(elements)
     

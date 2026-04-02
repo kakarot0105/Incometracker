@@ -1,13 +1,19 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { DollarSign, Clock, Briefcase, TrendingUp } from 'lucide-react';
+import { DollarSign, Clock, Briefcase, TrendingUp, Download } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   
   useEffect(() => {
     fetchSummary();
@@ -23,6 +29,44 @@ export default function Dashboard() {
       console.error('Failed to fetch summary:', error);
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const handleDownloadMonthlyReport = async () => {
+    setDownloadingPdf(true);
+    try {
+      const response = await axios.get(
+        `${BACKEND_URL}/api/reports/monthly-spreadsheet?month=${selectedMonth}`,
+        {
+          withCredentials: true,
+          responseType: 'blob'
+        }
+      );
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const monthName = new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const filename = `timesheet_${monthName.replace(' ', '_')}.pdf`;
+      
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Monthly report downloaded');
+    } catch (error) {
+      console.error('Failed to download report:', error);
+      if (error.response?.status === 404) {
+        toast.error('No hours logged for this month');
+      } else {
+        toast.error('Failed to generate report');
+      }
+    } finally {
+      setDownloadingPdf(false);
     }
   };
   
@@ -68,15 +112,51 @@ export default function Dashboard() {
   return (
     <div data-testid="dashboard-page">
       <div className="mb-8">
-        <h1 
-          className="text-4xl font-semibold tracking-tight text-[#344E41] mb-2" 
-          style={{ fontFamily: 'Outfit' }}
-        >
-          Dashboard
-        </h1>
-        <p className="text-base leading-relaxed text-[#5C6B61]">
-          Your earnings overview at a glance
-        </p>
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 
+              className="text-4xl font-semibold tracking-tight text-[#344E41] mb-2" 
+              style={{ fontFamily: 'Outfit' }}
+            >
+              Dashboard
+            </h1>
+            <p className="text-base leading-relaxed text-[#5C6B61]">
+              Your earnings overview at a glance
+            </p>
+          </div>
+          
+          <div className="flex items-end gap-3">
+            <div>
+              <Label htmlFor="month_selector" className="text-[#5C6B61] text-sm font-medium mb-1 block">
+                Select Month
+              </Label>
+              <Input
+                id="month_selector"
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+              />
+            </div>
+            <Button
+              onClick={handleDownloadMonthlyReport}
+              disabled={downloadingPdf}
+              className="bg-[#344E41] hover:bg-[#2B3A28] text-white flex items-center gap-2"
+            >
+              {downloadingPdf ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Download size={18} />
+                  Download Report
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
       
       {/* Metrics Grid */}
