@@ -28,55 +28,46 @@ export default function Payments() {
     notes: '' 
   });
   
-  // Weekly batch payment form
-  const [weeklyForm, setWeeklyForm] = useState({
+  // Weekly/Monthly payment form
+  const [monthlyPaymentForm, setMonthlyPaymentForm] = useState({
     job_id: '',
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    total_amount: '',
-    calculated_amount: 0,
-    hours_breakdown: [],
-    notes: ''
+    month: new Date().toISOString().slice(0, 7), // YYYY-MM format
+    amount_received: '',
+    calculated_earnings: 0,
+    hours_in_month: 0
   });
   
-  function getMonday(date) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff));
-  }
-  
-  // Calculate payment amount based on logged hours
+  // Calculate earnings for the selected job and month
   useEffect(() => {
-    const calculatePayment = async () => {
-      if (weeklyForm.job_id && weeklyForm.start_date && weeklyForm.end_date) {
+    const calculateMonthlyEarnings = async () => {
+      if (monthlyPaymentForm.job_id && monthlyPaymentForm.month) {
         try {
           const response = await axios.get(`${BACKEND_URL}/api/hours`, {
             withCredentials: true
           });
           
+          // Filter hours for selected job and month
           const hoursLogs = response.data.filter(log => {
-            return log.job_id === weeklyForm.job_id &&
-                   log.date >= weeklyForm.start_date &&
-                   log.date <= weeklyForm.end_date;
+            const logDate = log.date.slice(0, 7); // Get YYYY-MM from date
+            return log.job_id === monthlyPaymentForm.job_id && logDate === monthlyPaymentForm.month;
           });
           
-          const totalAmount = hoursLogs.reduce((sum, log) => sum + log.calculated_pay, 0);
+          const totalEarnings = hoursLogs.reduce((sum, log) => sum + log.calculated_pay, 0);
+          const totalHours = hoursLogs.reduce((sum, log) => sum + log.hours_worked, 0);
           
-          setWeeklyForm(prev => ({
+          setMonthlyPaymentForm(prev => ({
             ...prev,
-            calculated_amount: totalAmount,
-            total_amount: totalAmount.toFixed(2),
-            hours_breakdown: hoursLogs
+            calculated_earnings: totalEarnings,
+            hours_in_month: totalHours
           }));
         } catch (error) {
-          console.error('Failed to calculate payment:', error);
+          console.error('Failed to calculate earnings:', error);
         }
       }
     };
     
-    calculatePayment();
-  }, [weeklyForm.job_id, weeklyForm.start_date, weeklyForm.end_date]);
+    calculateMonthlyEarnings();
+  }, [monthlyPaymentForm.job_id, monthlyPaymentForm.month]);
   
   useEffect(() => {
     fetchData();
@@ -115,20 +106,21 @@ export default function Payments() {
         );
         toast.success('Payment recorded successfully');
       } else {
-        // Weekly batch entry
+        // Monthly payment entry
+        // Get first day of the selected month for the date
+        const paymentDate = `${monthlyPaymentForm.month}-01`;
+        
         await axios.post(
           `${BACKEND_URL}/api/payments`,
           {
-            job_id: weeklyForm.job_id || null,
-            amount: parseFloat(weeklyForm.total_amount),
-            date: weeklyForm.start_date,
-            notes: weeklyForm.notes ? 
-              `${weeklyForm.start_date} to ${weeklyForm.end_date}: ${weeklyForm.notes}` : 
-              `Payment for ${weeklyForm.start_date} to ${weeklyForm.end_date}`
+            job_id: monthlyPaymentForm.job_id,
+            amount: parseFloat(monthlyPaymentForm.amount_received),
+            date: paymentDate,
+            notes: `Payment for ${new Date(paymentDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
           },
           { withCredentials: true }
         );
-        toast.success('Weekly payment recorded successfully');
+        toast.success('Payment recorded successfully');
       }
       
       setDialogOpen(false);
@@ -147,17 +139,12 @@ export default function Payments() {
       date: new Date().toISOString().split('T')[0],
       notes: '' 
     });
-    const today = new Date();
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + 6);
-    setWeeklyForm({
+    setMonthlyPaymentForm({
       job_id: '',
-      start_date: today.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0],
-      total_amount: '',
-      calculated_amount: 0,
-      hours_breakdown: [],
-      notes: ''
+      month: new Date().toISOString().slice(0, 7),
+      amount_received: '',
+      calculated_earnings: 0,
+      hours_in_month: 0
     });
   };
   
@@ -275,7 +262,7 @@ export default function Payments() {
             <Tabs value={entryMode} onValueChange={setEntryMode} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4">
                 <TabsTrigger value="single">Single Payment</TabsTrigger>
-                <TabsTrigger value="weekly">Weekly Payment</TabsTrigger>
+                <TabsTrigger value="monthly">Monthly Payment</TabsTrigger>
               </TabsList>
               
               {/* Single Payment */}
@@ -362,18 +349,18 @@ export default function Payments() {
                 </form>
               </TabsContent>
               
-              {/* Weekly Payment */}
-              <TabsContent value="weekly">
+              {/* Monthly Payment */}
+              <TabsContent value="monthly">
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <Label htmlFor="weekly_job_id" className="text-[#5C6B61] font-medium">Job</Label>
+                    <Label htmlFor="monthly_job_id" className="text-[#5C6B61] font-medium">Job</Label>
                     <Select 
-                      value={weeklyForm.job_id} 
-                      onValueChange={(value) => setWeeklyForm({ ...weeklyForm, job_id: value })}
+                      value={monthlyPaymentForm.job_id} 
+                      onValueChange={(value) => setMonthlyPaymentForm({ ...monthlyPaymentForm, job_id: value })}
                       required
                     >
                       <SelectTrigger 
-                        id="weekly_job_id"
+                        id="monthly_job_id"
                         className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
                       >
                         <SelectValue placeholder="Select a job" />
@@ -388,92 +375,63 @@ export default function Payments() {
                     </Select>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="start_date" className="text-[#5C6B61] font-medium">Start Date</Label>
-                      <Input
-                        id="start_date"
-                        type="date"
-                        value={weeklyForm.start_date}
-                        onChange={(e) => {
-                          const startDate = new Date(e.target.value);
-                          const endDate = new Date(startDate);
-                          endDate.setDate(startDate.getDate() + 6);
-                          setWeeklyForm({ 
-                            ...weeklyForm, 
-                            start_date: e.target.value,
-                            end_date: endDate.toISOString().split('T')[0]
-                          });
-                        }}
-                        required
-                        className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="end_date" className="text-[#5C6B61] font-medium">End Date</Label>
-                      <Input
-                        id="end_date"
-                        type="date"
-                        value={weeklyForm.end_date}
-                        onChange={(e) => setWeeklyForm({ ...weeklyForm, end_date: e.target.value })}
-                        required
-                        className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                      />
-                    </div>
+                  <div>
+                    <Label htmlFor="payment_month" className="text-[#5C6B61] font-medium">Month</Label>
+                    <Input
+                      id="payment_month"
+                      type="month"
+                      value={monthlyPaymentForm.month}
+                      onChange={(e) => setMonthlyPaymentForm({ ...monthlyPaymentForm, month: e.target.value })}
+                      required
+                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                    />
                   </div>
                   
-                  {weeklyForm.hours_breakdown.length > 0 && (
+                  {monthlyPaymentForm.calculated_earnings > 0 && (
                     <div className="bg-[#F5F3EE] p-4 border-l-4 border-[#3A5A40]">
-                      <p className="text-sm font-medium text-[#344E41] mb-2">
-                        Hours Found: {weeklyForm.hours_breakdown.reduce((sum, log) => sum + log.hours_worked, 0)} hours
+                      <p className="text-sm font-medium text-[#344E41] mb-1">
+                        Your Earnings This Month
                       </p>
-                      <div className="space-y-1">
-                        {weeklyForm.hours_breakdown.map((log, idx) => (
-                          <p key={idx} className="text-sm text-[#5C6B61]">
-                            {new Date(log.date).toLocaleDateString()}: {log.hours_worked}h × ${log.hourly_rate}/hr = ${log.calculated_pay.toFixed(2)}
-                          </p>
-                        ))}
-                      </div>
+                      <p className="text-2xl font-semibold text-[#3A5A40] mb-2">
+                        ${monthlyPaymentForm.calculated_earnings.toFixed(2)}
+                      </p>
+                      <p className="text-sm text-[#5C6B61]">
+                        Based on {monthlyPaymentForm.hours_in_month} hours logged
+                      </p>
+                      {monthlyPaymentForm.amount_received && parseFloat(monthlyPaymentForm.amount_received) !== monthlyPaymentForm.calculated_earnings && (
+                        <p className="text-sm font-medium mt-2" style={{
+                          color: parseFloat(monthlyPaymentForm.amount_received) < monthlyPaymentForm.calculated_earnings ? '#E07A5F' : '#3A5A40'
+                        }}>
+                          {parseFloat(monthlyPaymentForm.amount_received) < monthlyPaymentForm.calculated_earnings 
+                            ? `Underpaid by $${(monthlyPaymentForm.calculated_earnings - parseFloat(monthlyPaymentForm.amount_received)).toFixed(2)}`
+                            : `Overpaid by $${(parseFloat(monthlyPaymentForm.amount_received) - monthlyPaymentForm.calculated_earnings).toFixed(2)}`
+                          }
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {monthlyPaymentForm.job_id && monthlyPaymentForm.month && monthlyPaymentForm.calculated_earnings === 0 && (
+                    <div className="bg-[#FEF6F4] p-4 border-l-4 border-[#E07A5F]">
+                      <p className="text-sm text-[#E07A5F]">
+                        No hours logged for this job in {new Date(monthlyPaymentForm.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                      </p>
                     </div>
                   )}
                   
                   <div>
-                    <Label htmlFor="total_amount" className="text-[#5C6B61] font-medium">
-                      Total Amount ($)
-                      {weeklyForm.calculated_amount > 0 && (
-                        <span className="text-[#3A5A40] font-semibold ml-2">
-                          (Auto-calculated: ${weeklyForm.calculated_amount.toFixed(2)})
-                        </span>
-                      )}
-                    </Label>
+                    <Label htmlFor="amount_received" className="text-[#5C6B61] font-medium">Amount Received ($)</Label>
                     <Input
-                      id="total_amount"
+                      id="amount_received"
                       type="number"
                       step="0.01"
-                      value={weeklyForm.total_amount}
-                      onChange={(e) => setWeeklyForm({ ...weeklyForm, total_amount: e.target.value })}
+                      value={monthlyPaymentForm.amount_received}
+                      onChange={(e) => setMonthlyPaymentForm({ ...monthlyPaymentForm, amount_received: e.target.value })}
                       required
                       className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                      placeholder="0.00"
+                      placeholder="2000.00"
                     />
-                    <p className="text-sm text-[#5C6B61] mt-1">
-                      {weeklyForm.calculated_amount > 0 
-                        ? 'Amount auto-calculated from logged hours (you can adjust if needed)'
-                        : 'Enter amount or log hours first to auto-calculate'
-                      }
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="weekly_notes" className="text-[#5C6B61] font-medium">Notes (Optional)</Label>
-                    <Textarea
-                      id="weekly_notes"
-                      value={weeklyForm.notes}
-                      onChange={(e) => setWeeklyForm({ ...weeklyForm, notes: e.target.value })}
-                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                      placeholder="Additional details..."
-                      rows={3}
-                    />
+                    <p className="text-sm text-[#5C6B61] mt-1">How much did you actually receive?</p>
                   </div>
                   
                   <div className="flex gap-3 pt-4">
