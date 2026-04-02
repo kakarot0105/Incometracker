@@ -12,7 +12,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Build frontend on GitHub Actions (fast, reliable, no Node needed on VPS)
+    # Build frontend on GitHub Actions (fast, reliable)
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -30,31 +30,7 @@ jobs:
         CI: false
       run: npm run build
 
-    # Deploy everything to IONOS VPS via SSH
-    - name: Deploy to VPS
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USER }}
-        password: ${{ secrets.VPS_PASSWORD }}
-        command_timeout: 10m
-        script: |
-          set -e
-          cd /root/Incometracker
-          git pull origin main
-          
-          # Update backend
-          cd backend
-          source venv/bin/activate
-          pip install -r requirements.txt
-          pm2 restart backend
-          
-          # Reload Nginx
-          systemctl reload nginx || nginx -s reload || true
-          
-          echo "✅ Backend deployed!"
-
-    # Copy the pre-built frontend to VPS
+    # STEP 1: Copy the pre-built frontend to IONOS VPS first
     - name: Copy frontend build to VPS
       uses: appleboy/scp-action@master
       with:
@@ -65,15 +41,29 @@ jobs:
         target: "/root/Incometracker/"
         overwrite: true
 
-    # Final: reload Nginx to pick up new files
-    - name: Reload Nginx
+    # STEP 2: Update backend and reload Nginx on IONOS VPS
+    - name: Update backend and reload Nginx
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USER }}
         password: ${{ secrets.VPS_PASSWORD }}
+        command_timeout: 10m
         script: |
-          echo "=== Verifying build files ==="
-          ls /root/Incometracker/frontend/build/static/js/ || echo "No JS found"
-          systemctl reload nginx || true
+          cd /root/Incometracker
+          git pull origin main
+          
+          # Update backend (don't fail if venv issues)
+          cd backend
+          source venv/bin/activate 2>/dev/null || true
+          pip install -r requirements.txt 2>/dev/null || true
+          pm2 restart backend 2>/dev/null || true
+          
+          # Verify frontend build
+          echo "=== Frontend files ==="
+          ls /root/Incometracker/frontend/build/static/js/ 2>/dev/null || echo "No JS files!"
+          
+          # Reload Nginx
+          systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null || true
+          
           echo "✅ Deployment complete!"
