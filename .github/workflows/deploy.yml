@@ -1,0 +1,31 @@
+name: Deploy to IONOS VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        password: ${{ secrets.VPS_PASSWORD }}
+        script: |
+          cd /root/Incometracker
+          git pull origin main
+          cd backend
+          source venv/bin/activate
+          pip install -r requirements.txt
+          pm2 restart backend
+          cd ../frontend
+          npm install --legacy-peer-deps
+          pm2 restart frontend
+          echo "✅ Deployment complete!"
