@@ -9,6 +9,7 @@ import Payments from "./pages/Payments";
 import Invoices from "./pages/Invoices";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function AppRouter() {
   const location = useLocation();
@@ -35,12 +36,14 @@ function AppRouter() {
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <AppRouter />
-        <Toaster position="top-center" />
-      </BrowserRouter>
-    </div>
+    <ErrorBoundary>
+      <div className="App">
+        <BrowserRouter>
+          <AppRouter />
+          <Toaster position="top-center" />
+        </BrowserRouter>
+      </div>
+    </ErrorBoundary>
   );
 }
 

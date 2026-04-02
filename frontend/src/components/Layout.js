@@ -3,7 +3,7 @@ import { Briefcase, Clock, CreditCard, LayoutDashboard, FileText, LogOut } from 
 import axios from 'axios';
 import { toast } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 
 export default function Layout() {
   const location = useLocation();
