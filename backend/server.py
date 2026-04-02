@@ -168,6 +168,8 @@ async def get_current_user(request: Request, session_token: Optional[str] = Cook
 async def create_session(session_create: SessionCreate, response: Response):
     """Exchange session_id for session_token"""
     try:
+        logger.info(f"Auth session exchange started for session_id: {session_create.session_id[:10]}...")
+        
         # Call Emergent Auth API
         async with httpx.AsyncClient() as client:
             emergent_response = await client.get(
@@ -176,10 +178,14 @@ async def create_session(session_create: SessionCreate, response: Response):
                 timeout=10.0
             )
             
+            logger.info(f"Emergent auth response status: {emergent_response.status_code}")
+            
             if emergent_response.status_code != 200:
+                logger.error(f"Emergent auth failed: {emergent_response.text}")
                 raise HTTPException(status_code=401, detail="Invalid session_id")
             
             data = emergent_response.json()
+            logger.info(f"User email from Emergent: {data.get('email')}")
         
         # Generate our own user_id and session_token
         user_id = f"user_{uuid.uuid4().hex[:12]}"
@@ -193,6 +199,7 @@ async def create_session(session_create: SessionCreate, response: Response):
         
         if existing_user:
             user_id = existing_user["user_id"]
+            logger.info(f"Existing user found: {user_id}")
             # Update user info
             await db.users.update_one(
                 {"user_id": user_id},
@@ -202,6 +209,7 @@ async def create_session(session_create: SessionCreate, response: Response):
                 }}
             )
         else:
+            logger.info(f"Creating new user: {data['email']}")
             # Create new user
             user_doc = {
                 "user_id": user_id,
@@ -220,6 +228,7 @@ async def create_session(session_create: SessionCreate, response: Response):
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.user_sessions.insert_one(session_doc)
+        logger.info(f"Session created successfully for user: {user_id}")
         
         # Set httpOnly cookie
         response.set_cookie(
@@ -243,10 +252,11 @@ async def create_session(session_create: SessionCreate, response: Response):
         return User(**user_doc)
     
     except httpx.TimeoutException:
+        logger.error("Emergent auth service timeout")
         raise HTTPException(status_code=504, detail="Auth service timeout")
     except Exception as e:
-        logging.error(f"Session creation error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create session")
+        logger.error(f"Session creation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
 
 @api_router.get("/auth/me", response_model=User)
 async def get_me(request: Request, session_token: Optional[str] = Cookie(None)):

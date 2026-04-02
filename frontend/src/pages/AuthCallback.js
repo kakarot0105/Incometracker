@@ -18,14 +18,18 @@ export default function AuthCallback() {
       try {
         // Extract session_id from URL fragment
         const hash = window.location.hash;
+        console.log('Auth callback - hash:', hash);
+        
         const sessionIdMatch = hash.match(/session_id=([^&]+)/);
         
         if (!sessionIdMatch) {
+          console.error('No session_id found in hash');
           navigate('/login');
           return;
         }
         
         const sessionId = sessionIdMatch[1];
+        console.log('Exchanging session_id for session_token...');
         
         // Exchange session_id for session_token
         const response = await axios.post(
@@ -34,12 +38,18 @@ export default function AuthCallback() {
           { withCredentials: true }
         );
         
+        console.log('Session exchange successful, user:', response.data);
         const user = response.data;
+        
+        // Clear the hash from URL
+        window.history.replaceState(null, '', '/');
         
         // Navigate to dashboard with user data
         navigate('/', { state: { user }, replace: true });
       } catch (error) {
         console.error('Auth callback error:', error);
+        console.error('Error details:', error.response?.data);
+        alert(`Login failed: ${error.response?.data?.detail || error.message}`);
         navigate('/login');
       }
     };
