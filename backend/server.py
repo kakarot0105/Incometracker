@@ -50,9 +50,6 @@ class UserSession(BaseModel):
     expires_at: datetime
     created_at: datetime
 
-class SessionCreate(BaseModel):
-    session_id: str
-
 class Job(BaseModel):
     model_config = ConfigDict(extra="ignore")
     job_id: str
@@ -164,62 +161,84 @@ async def get_current_user(request: Request, session_token: Optional[str] = Cook
 
 # ============ Auth Routes ============
 
-@api_router.post("/auth/session")
-async def create_session(session_create: SessionCreate, response: Response):
-    """Exchange session_id for session_token"""
+@api_router.post("/auth/google")
+async def google_auth(code_data: dict, response: Response):
+    """Exchange Google OAuth code for session_token"""
     try:
-        logger.info(f"Auth session exchange started for session_id: {session_create.session_id[:10]}...")
-        
-        # Call Emergent Auth API
+        code = code_data.get("code")
+        redirect_uri = code_data.get("redirect_uri")
+
+        if not code:
+            raise HTTPException(status_code=400, detail="Missing authorization code")
+
+        google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+        google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+        google_redirect_uri = os.getenv("GOOGLE_REDIRECT_URI") or redirect_uri
+
+        if not google_client_id or not google_client_secret:
+            raise HTTPException(status_code=500, detail="Google OAuth not configured")
+
+        # Exchange code for access token
         async with httpx.AsyncClient() as client:
-            emergent_response = await client.get(
-                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-                headers={"X-Session-ID": session_create.session_id},
+            token_response = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": google_client_id,
+                    "client_secret": google_client_secret,
+                    "redirect_uri": google_redirect_uri,
+                    "grant_type": "authorization_code"
+                },
                 timeout=10.0
             )
-            
-            logger.info(f"Emergent auth response status: {emergent_response.status_code}")
-            
-            if emergent_response.status_code != 200:
-                logger.error(f"Emergent auth failed: {emergent_response.text}")
-                raise HTTPException(status_code=401, detail="Invalid session_id")
-            
-            data = emergent_response.json()
-            logger.info(f"User email from Emergent: {data.get('email')}")
-        
-        # Generate our own user_id and session_token
+
+            if token_response.status_code != 200:
+                logger.error(f"Google token exchange failed: {token_response.text}")
+                raise HTTPException(status_code=401, detail="Invalid authorization code")
+
+            token_data = token_response.json()
+            access_token = token_data.get("access_token")
+
+            # Get user info
+            user_response = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10.0
+            )
+
+            if user_response.status_code != 200:
+                logger.error(f"Google userinfo failed: {user_response.text}")
+                raise HTTPException(status_code=401, detail="Failed to get user info")
+
+            data = user_response.json()
+            logger.info(f"Google user email: {data.get('email')}")
+
+        # Generate user_id and session_token
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         session_token = f"session_{uuid.uuid4().hex}"
-        
+
         # Check if user exists
-        existing_user = await db.users.find_one(
-            {"email": data["email"]},
-            {"_id": 0}
-        )
-        
+        existing_user = await db.users.find_one({"email": data["email"]}, {"_id": 0})
+
         if existing_user:
             user_id = existing_user["user_id"]
-            logger.info(f"Existing user found: {user_id}")
-            # Update user info
             await db.users.update_one(
                 {"user_id": user_id},
                 {"$set": {
-                    "name": data["name"],
+                    "name": data.get("name"),
                     "picture": data.get("picture")
                 }}
             )
         else:
-            logger.info(f"Creating new user: {data['email']}")
-            # Create new user
             user_doc = {
                 "user_id": user_id,
                 "email": data["email"],
-                "name": data["name"],
+                "name": data.get("name"),
                 "picture": data.get("picture"),
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             await db.users.insert_one(user_doc)
-        
+
         # Create session
         session_doc = {
             "user_id": user_id,
@@ -228,35 +247,31 @@ async def create_session(session_create: SessionCreate, response: Response):
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.user_sessions.insert_one(session_doc)
-        logger.info(f"Session created successfully for user: {user_id}")
-        
-        # Set httpOnly cookie
+
+        # Set httpOnly cookie (secure in production)
+        is_secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
         response.set_cookie(
             key="session_token",
             value=session_token,
             httponly=True,
-            secure=True,
-            samesite="none",
+            secure=is_secure,
+            samesite="none" if is_secure else "lax",
             path="/",
             max_age=7 * 24 * 60 * 60
         )
-        
+
         # Return user data
-        user_doc = await db.users.find_one(
-            {"user_id": user_id},
-            {"_id": 0}
-        )
+        user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
         if isinstance(user_doc['created_at'], str):
             user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
-        
+
         return User(**user_doc)
-    
+
     except httpx.TimeoutException:
-        logger.error("Emergent auth service timeout")
         raise HTTPException(status_code=504, detail="Auth service timeout")
     except Exception as e:
-        logger.error(f"Session creation error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
+        logger.error(f"Google auth error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to authenticate: {str(e)}")
 
 @api_router.get("/auth/me", response_model=User)
 async def get_me(request: Request, session_token: Optional[str] = Cookie(None)):

@@ -2,61 +2,61 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const hasProcessed = useRef(false);
-  
+
   useEffect(() => {
-    // CRITICAL: Use useRef to prevent race conditions under StrictMode
-    // Set synchronously at the start
     if (hasProcessed.current) return;
     hasProcessed.current = true;
-    
-    const processSession = async () => {
+
+    const processAuth = async () => {
       try {
-        // Extract session_id from URL fragment
-        const hash = window.location.hash;
-        console.log('Auth callback - hash:', hash);
-        
-        const sessionIdMatch = hash.match(/session_id=([^&]+)/);
-        
-        if (!sessionIdMatch) {
-          console.error('No session_id found in hash');
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        const storedState = sessionStorage.getItem('oauth_state');
+
+        if (!code) {
+          console.error('No authorization code found');
           navigate('/login');
           return;
         }
-        
-        const sessionId = sessionIdMatch[1];
-        console.log('Exchanging session_id for session_token...');
-        
-        // Exchange session_id for session_token
+
+        // CSRF protection
+        if (state !== storedState) {
+          console.error('Invalid OAuth state');
+          alert('Invalid login attempt. Please try again.');
+          navigate('/login');
+          return;
+        }
+
+        // Exchange code for session
         const response = await axios.post(
-          `${BACKEND_URL}/api/auth/session`,
-          { session_id: sessionId },
+          `${BACKEND_URL}/api/auth/google`,
+          { code, redirect_uri: window.location.origin + '/auth/callback' },
           { withCredentials: true }
         );
-        
-        console.log('Session exchange successful, user:', response.data);
+
         const user = response.data;
-        
-        // Clear the hash from URL
+
+        // Clear URL params
         window.history.replaceState(null, '', '/');
-        
-        // Navigate to dashboard with user data
+        sessionStorage.removeItem('oauth_state');
+
         navigate('/', { state: { user }, replace: true });
       } catch (error) {
         console.error('Auth callback error:', error);
-        console.error('Error details:', error.response?.data);
         alert(`Login failed: ${error.response?.data?.detail || error.message}`);
         navigate('/login');
       }
     };
-    
-    processSession();
+
+    processAuth();
   }, [navigate]);
-  
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB]">
       <div className="text-center">

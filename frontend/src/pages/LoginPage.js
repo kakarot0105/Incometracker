@@ -1,10 +1,28 @@
 export default function LoginPage() {
   const handleGoogleLogin = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + '/';
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      alert('Google Client ID is not configured. Please set REACT_APP_GOOGLE_CLIENT_ID.');
+      return;
+    }
+
+    const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
+    const scope = encodeURIComponent('email profile');
+    const state = Math.random().toString(36).substring(7);
+
+    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${clientId}&` +
+      `redirect_uri=${redirectUri}&` +
+      `response_type=code&` +
+      `scope=${scope}&` +
+      `state=${state}&` +
+      `access_type=offline&` +
+      `prompt=consent`;
+
+    sessionStorage.setItem('oauth_state', state);
+    window.location.href = googleAuthUrl;
   };
-  
+
   return (
     <div 
       className="min-h-screen flex items-center justify-center relative overflow-hidden"
@@ -16,7 +34,7 @@ export default function LoginPage() {
       <div className="absolute inset-0 opacity-5" style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23344E41' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
       }}></div>
-      
+
       <div className="relative z-10 w-full max-w-md px-6">
         <div 
           className="bg-white border border-[#EAE6DF] p-8 transition-transform duration-200 hover:-translate-y-[2px] hover:shadow-sm"
@@ -24,13 +42,13 @@ export default function LoginPage() {
         >
           <div className="text-center mb-8">
             <h1 className="text-4xl font-semibold tracking-tight text-[#344E41] mb-3" style={{ fontFamily: 'Outfit' }}>
-              Salary Tracker
+              Income Tracker
             </h1>
             <p className="text-base leading-relaxed text-[#5C6B61]">
               Track your hours, jobs, and earnings in one place
             </p>
           </div>
-          
+
           <button
             onClick={handleGoogleLogin}
             data-testid="google-login-button"
@@ -44,14 +62,14 @@ export default function LoginPage() {
             </svg>
             Sign in with Google
           </button>
-          
+
           <div className="mt-6 text-center">
             <p className="text-sm font-medium text-[#5C6B61]">
               Securely track your freelance income
             </p>
           </div>
         </div>
-        
+
         <div className="mt-8 text-center text-sm text-[#5C6B61]">
           <p>Simple • Organized • Trustworthy</p>
         </div>
