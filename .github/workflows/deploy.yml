@@ -12,7 +12,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Build frontend on GitHub Actions (fast, reliable)
+    # Build frontend on GitHub Actions
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -30,40 +30,45 @@ jobs:
         CI: false
       run: npm run build
 
-    # STEP 1: Copy the pre-built frontend to IONOS VPS first
-    - name: Copy frontend build to VPS
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USER }}
-        password: ${{ secrets.VPS_PASSWORD }}
-        source: "frontend/build/"
-        target: "/root/Incometracker/"
-        overwrite: true
+    # Install sshpass for password-based SSH/SCP
+    - name: Install sshpass
+      run: sudo apt-get install -y sshpass
 
-    # STEP 2: Update backend and reload Nginx on IONOS VPS
+    # Transfer build files to VPS using rsync over SSH
+    - name: Deploy frontend build to VPS
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+      run: |
+        sshpass -p "$VPS_PASSWORD" rsync -avz --delete \
+          -e "ssh -o StrictHostKeyChecking=no" \
+          frontend/build/ \
+          ${VPS_USER}@${VPS_HOST}:/root/Incometracker/frontend/build/
+
+    # Update backend and reload Nginx
     - name: Update backend and reload Nginx
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USER }}
-        password: ${{ secrets.VPS_PASSWORD }}
-        command_timeout: 10m
-        script: |
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+      run: |
+        sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST} << 'EOF'
           cd /root/Incometracker
           git pull origin main
           
-          # Update backend (don't fail if venv issues)
+          # Update backend
           cd backend
           source venv/bin/activate 2>/dev/null || true
           pip install -r requirements.txt 2>/dev/null || true
           pm2 restart backend 2>/dev/null || true
           
-          # Verify frontend build
-          echo "=== Frontend files ==="
-          ls /root/Incometracker/frontend/build/static/js/ 2>/dev/null || echo "No JS files!"
+          # Verify frontend
+          echo "=== Frontend build files ==="
+          ls -la /root/Incometracker/frontend/build/static/js/ || echo "No JS!"
           
           # Reload Nginx
           systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null || true
           
           echo "✅ Deployment complete!"
+        EOF
