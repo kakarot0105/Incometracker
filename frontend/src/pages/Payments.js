@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Plus, Trash2, CreditCard } from 'lucide-react';
+import { Plus, Trash2, CreditCard, Download } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -16,12 +17,31 @@ export default function Payments() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ 
+  const [entryMode, setEntryMode] = useState('single');
+  const [generatingStatement, setGeneratingStatement] = useState(false);
+  
+  // Single payment form
+  const [singleForm, setSingleForm] = useState({ 
     job_id: '', 
     amount: '', 
     date: new Date().toISOString().split('T')[0],
     notes: '' 
   });
+  
+  // Weekly batch payment form
+  const [weeklyForm, setWeeklyForm] = useState({
+    job_id: '',
+    total_amount: '',
+    week_start: getMonday(new Date()).toISOString().split('T')[0],
+    notes: ''
+  });
+  
+  function getMonday(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+  }
   
   useEffect(() => {
     fetchData();
@@ -47,29 +67,89 @@ export default function Payments() {
     e.preventDefault();
     
     try {
-      await axios.post(
-        `${BACKEND_URL}/api/payments`,
-        {
-          job_id: formData.job_id || null,
-          amount: parseFloat(formData.amount),
-          date: formData.date,
-          notes: formData.notes || null
-        },
-        { withCredentials: true }
-      );
+      if (entryMode === 'single') {
+        await axios.post(
+          `${BACKEND_URL}/api/payments`,
+          {
+            job_id: singleForm.job_id || null,
+            amount: parseFloat(singleForm.amount),
+            date: singleForm.date,
+            notes: singleForm.notes || null
+          },
+          { withCredentials: true }
+        );
+        toast.success('Payment recorded successfully');
+      } else {
+        // Weekly batch entry
+        await axios.post(
+          `${BACKEND_URL}/api/payments`,
+          {
+            job_id: weeklyForm.job_id || null,
+            amount: parseFloat(weeklyForm.total_amount),
+            date: weeklyForm.week_start,
+            notes: weeklyForm.notes ? `Week of ${weeklyForm.week_start}: ${weeklyForm.notes}` : `Week of ${weeklyForm.week_start}`
+          },
+          { withCredentials: true }
+        );
+        toast.success('Weekly payment recorded successfully');
+      }
       
-      toast.success('Payment recorded successfully');
       setDialogOpen(false);
-      setFormData({ 
-        job_id: '', 
-        amount: '', 
-        date: new Date().toISOString().split('T')[0],
-        notes: '' 
-      });
+      resetForms();
       fetchData();
     } catch (error) {
       console.error('Failed to record payment:', error);
       toast.error('Failed to record payment');
+    }
+  };
+  
+  const resetForms = () => {
+    setSingleForm({ 
+      job_id: '', 
+      amount: '', 
+      date: new Date().toISOString().split('T')[0],
+      notes: '' 
+    });
+    setWeeklyForm({
+      job_id: '',
+      total_amount: '',
+      week_start: getMonday(new Date()).toISOString().split('T')[0],
+      notes: ''
+    });
+  };
+  
+  const handleDownloadStatement = async () => {
+    setGeneratingStatement(true);
+    try {
+      const response = await axios.get(
+        `${BACKEND_URL}/api/reports/statement`,
+        {
+          withCredentials: true,
+          responseType: 'blob'
+        }
+      );
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const contentDisposition = response.headers['content-disposition'];
+      const filenameMatch = contentDisposition?.match(/filename="?(.+?)\"?$/);
+      const filename = filenameMatch ? filenameMatch[1] : `earnings_statement_${Date.now()}.pdf`;
+      
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Statement downloaded successfully');
+    } catch (error) {
+      console.error('Failed to download statement:', error);
+      toast.error('Failed to generate statement');
+    } finally {
+      setGeneratingStatement(false);
     }
   };
   
@@ -111,104 +191,224 @@ export default function Payments() {
           </p>
         </div>
         
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button 
-              data-testid="add-payment-button"
-              className="bg-[#344E41] hover:bg-[#2B3A28] text-white flex items-center gap-2 transition-all duration-200"
-            >
-              <Plus size={20} />
-              Add Payment
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-white border border-[#EAE6DF]">
+        <div className="flex gap-3">
+          <Button
+            onClick={handleDownloadStatement}
+            disabled={generatingStatement}
+            data-testid="download-statement-button"
+            className="bg-[#A3B18A] hover:bg-[#8FA376] text-white flex items-center gap-2 transition-all duration-200"
+          >
+            {generatingStatement ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download size={20} />
+                Download Statement
+              </>
+            )}
+          </Button>
+          
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                data-testid="add-payment-button"
+                className="bg-[#344E41] hover:bg-[#2B3A28] text-white flex items-center gap-2 transition-all duration-200"
+                onClick={resetForms}
+              >
+                <Plus size={20} />
+                Add Payment
+              </Button>
+            </DialogTrigger>
+          <DialogContent className="bg-white border border-[#EAE6DF] max-w-2xl">
             <DialogHeader>
               <DialogTitle className="text-2xl font-medium text-[#344E41]" style={{ fontFamily: 'Outfit' }}>
                 Record Payment
               </DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4" data-testid="payment-form">
-              <div>
-                <Label htmlFor="job_id" className="text-[#5C6B61] font-medium">Job (Optional)</Label>
-                <Select 
-                  value={formData.job_id} 
-                  onValueChange={(value) => setFormData({ ...formData, job_id: value })}
-                >
-                  <SelectTrigger 
-                    id="job_id"
-                    data-testid="payment-job-select"
-                    className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                  >
-                    <SelectValue placeholder="Select a job (optional)" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border border-[#EAE6DF]">
-                    {jobs.map((job) => (
-                      <SelectItem key={job.job_id} value={job.job_id}>
-                        {job.job_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="amount" className="text-[#5C6B61] font-medium">Amount ($)</Label>
-                <Input
-                  id="amount"
-                  data-testid="payment-amount-input"
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  required
-                  className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                  placeholder="500.00"
-                />
-              </div>
-              <div>
-                <Label htmlFor="date" className="text-[#5C6B61] font-medium">Date</Label>
-                <Input
-                  id="date"
-                  data-testid="payment-date-input"
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  required
-                  className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                />
-              </div>
-              <div>
-                <Label htmlFor="notes" className="text-[#5C6B61] font-medium">Notes (Optional)</Label>
-                <Textarea
-                  id="notes"
-                  data-testid="payment-notes-input"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
-                  placeholder="Any additional notes..."
-                  rows={3}
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setDialogOpen(false)}
-                  className="flex-1 border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE]"
-                  data-testid="cancel-payment-button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="flex-1 bg-[#344E41] hover:bg-[#2B3A28] text-white"
-                  data-testid="submit-payment-button"
-                >
-                  Record Payment
-                </Button>
-              </div>
-            </form>
+            
+            <Tabs value={entryMode} onValueChange={setEntryMode} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="single">Single Payment</TabsTrigger>
+                <TabsTrigger value="weekly">Weekly Payment</TabsTrigger>
+              </TabsList>
+              
+              {/* Single Payment */}
+              <TabsContent value="single">
+                <form onSubmit={handleSubmit} className="space-y-4" data-testid="payment-form">
+                  <div>
+                    <Label htmlFor="single_job_id" className="text-[#5C6B61] font-medium">Job (Optional)</Label>
+                    <Select 
+                      value={singleForm.job_id} 
+                      onValueChange={(value) => setSingleForm({ ...singleForm, job_id: value })}
+                    >
+                      <SelectTrigger 
+                        id="single_job_id"
+                        data-testid="payment-job-select"
+                        className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                      >
+                        <SelectValue placeholder="Select a job (optional)" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border border-[#EAE6DF]">
+                        {jobs.map((job) => (
+                          <SelectItem key={job.job_id} value={job.job_id}>
+                            {job.job_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="single_amount" className="text-[#5C6B61] font-medium">Amount ($)</Label>
+                    <Input
+                      id="single_amount"
+                      data-testid="payment-amount-input"
+                      type="number"
+                      step="0.01"
+                      value={singleForm.amount}
+                      onChange={(e) => setSingleForm({ ...singleForm, amount: e.target.value })}
+                      required
+                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                      placeholder="500.00"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="single_date" className="text-[#5C6B61] font-medium">Date</Label>
+                    <Input
+                      id="single_date"
+                      data-testid="payment-date-input"
+                      type="date"
+                      value={singleForm.date}
+                      onChange={(e) => setSingleForm({ ...singleForm, date: e.target.value })}
+                      required
+                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="single_notes" className="text-[#5C6B61] font-medium">Notes (Optional)</Label>
+                    <Textarea
+                      id="single_notes"
+                      data-testid="payment-notes-input"
+                      value={singleForm.notes}
+                      onChange={(e) => setSingleForm({ ...singleForm, notes: e.target.value })}
+                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                      placeholder="Any additional notes..."
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setDialogOpen(false)}
+                      className="flex-1 border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE]"
+                      data-testid="cancel-payment-button"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="flex-1 bg-[#344E41] hover:bg-[#2B3A28] text-white"
+                      data-testid="submit-payment-button"
+                    >
+                      Record Payment
+                    </Button>
+                  </div>
+                </form>
+              </TabsContent>
+              
+              {/* Weekly Payment */}
+              <TabsContent value="weekly">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <Label htmlFor="weekly_job_id" className="text-[#5C6B61] font-medium">Job (Optional)</Label>
+                    <Select 
+                      value={weeklyForm.job_id} 
+                      onValueChange={(value) => setWeeklyForm({ ...weeklyForm, job_id: value })}
+                    >
+                      <SelectTrigger 
+                        id="weekly_job_id"
+                        className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                      >
+                        <SelectValue placeholder="Select a job (optional)" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border border-[#EAE6DF]">
+                        {jobs.map((job) => (
+                          <SelectItem key={job.job_id} value={job.job_id}>
+                            {job.job_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="week_start" className="text-[#5C6B61] font-medium">Week Starting</Label>
+                    <Input
+                      id="week_start"
+                      type="date"
+                      value={weeklyForm.week_start}
+                      onChange={(e) => {
+                        const monday = getMonday(new Date(e.target.value));
+                        setWeeklyForm({ ...weeklyForm, week_start: monday.toISOString().split('T')[0] });
+                      }}
+                      required
+                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                    />
+                    <p className="text-sm text-[#5C6B61] mt-1">Week starts on Monday</p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="total_amount" className="text-[#5C6B61] font-medium">Total Amount ($)</Label>
+                    <Input
+                      id="total_amount"
+                      type="number"
+                      step="0.01"
+                      value={weeklyForm.total_amount}
+                      onChange={(e) => setWeeklyForm({ ...weeklyForm, total_amount: e.target.value })}
+                      required
+                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                      placeholder="2000.00"
+                    />
+                    <p className="text-sm text-[#5C6B61] mt-1">Payment received for the week</p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="weekly_notes" className="text-[#5C6B61] font-medium">Notes (Optional)</Label>
+                    <Textarea
+                      id="weekly_notes"
+                      value={weeklyForm.notes}
+                      onChange={(e) => setWeeklyForm({ ...weeklyForm, notes: e.target.value })}
+                      className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41]"
+                      placeholder="Additional details..."
+                      rows={3}
+                    />
+                  </div>
+                  
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setDialogOpen(false)}
+                      className="flex-1 border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE]"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="flex-1 bg-[#344E41] hover:bg-[#2B3A28] text-white"
+                    >
+                      Record Weekly Payment
+                    </Button>
+                  </div>
+                </form>
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
+      </div>
       </div>
       
       {payments.length === 0 ? (

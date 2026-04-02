@@ -694,6 +694,242 @@ async def generate_invoice(
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+# ============ Earnings Statement Route ============
+
+@api_router.get("/reports/statement")
+async def generate_earnings_statement(
+    request: Request,
+    session_token: Optional[str] = Cookie(None)
+):
+    """Generate a comprehensive earnings statement PDF"""
+    user = await get_current_user(request, session_token)
+    
+    # Fetch all data
+    hours_logs = await db.hours_logs.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).sort("date", 1).to_list(10000)
+    
+    payments = await db.payments.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).sort("date", 1).to_list(10000)
+    
+    jobs = await db.jobs.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Calculate totals
+    total_earnings = sum(log["calculated_pay"] for log in hours_logs)
+    total_payments = sum(payment["amount"] for payment in payments)
+    balance = total_earnings - total_payments
+    total_hours = sum(log["hours_worked"] for log in hours_logs)
+    
+    # Job breakdown
+    job_earnings = {}
+    for log in hours_logs:
+        job_id = log["job_id"]
+        if job_id not in job_earnings:
+            job_earnings[job_id] = {
+                "job_name": log["job_name"],
+                "hours": 0,
+                "earnings": 0,
+                "rate": log["hourly_rate"]
+            }
+        job_earnings[job_id]["hours"] += log["hours_worked"]
+        job_earnings[job_id]["earnings"] += log["calculated_pay"]
+    
+    # Create PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=letter, 
+        rightMargin=50, 
+        leftMargin=50, 
+        topMargin=50, 
+        bottomMargin=30
+    )
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'Title',
+        parent=styles['Heading1'],
+        fontSize=28,
+        textColor=colors.HexColor('#344E41'),
+        spaceAfter=10,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'Subtitle',
+        parent=styles['Normal'],
+        fontSize=11,
+        textColor=colors.HexColor('#5C6B61'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'Heading',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colors.HexColor('#344E41'),
+        spaceAfter=15,
+        spaceBefore=20,
+        fontName='Helvetica-Bold'
+    )
+    
+    # Header
+    elements.append(Paragraph("EARNINGS STATEMENT", title_style))
+    elements.append(Paragraph(
+        f"Prepared for: {user.name}<br/>{user.email}<br/>Date: {datetime.now().strftime('%B %d, %Y')}", 
+        subtitle_style
+    ))
+    
+    # Summary Section
+    elements.append(Paragraph("Summary", heading_style))
+    
+    summary_data = [
+        ['Total Hours Worked:', f"{total_hours:.1f} hours"],
+        ['Total Earnings:', f"${total_earnings:,.2f}"],
+        ['Total Payments Received:', f"${total_payments:,.2f}"],
+        ['Balance Owed:', f"${balance:,.2f}"]
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+    summary_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#344E41')),
+        ('TEXTCOLOR', (1, 0), (1, -2), colors.HexColor('#1F2937')),
+        ('TEXTCOLOR', (1, -1), (1, -1), colors.HexColor('#E07A5F') if balance > 0 else colors.HexColor('#3A5A40')),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('LINEBELOW', (0, -1), (-1, -1), 2, colors.HexColor('#344E41')),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Earnings by Job
+    if job_earnings:
+        elements.append(Paragraph("Earnings by Job", heading_style))
+        
+        job_data = [['Job', 'Hours', 'Rate', 'Total Earnings']]
+        for job_id, data in sorted(job_earnings.items(), key=lambda x: x[1]['earnings'], reverse=True):
+            job_data.append([
+                data['job_name'],
+                f"{data['hours']:.1f}",
+                f"${data['rate']:.2f}/hr",
+                f"${data['earnings']:,.2f}"
+            ])
+        
+        job_table = Table(job_data, colWidths=[2.5*inch, 1*inch, 1.2*inch, 1.3*inch])
+        job_table.setStyle(TableStyle([
+            # Header
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#344E41')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 0), (-1, 0), 12),
+            
+            # Data rows
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#EAE6DF')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FDFCFB')]),
+            ('TOPPADDING', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+        ]))
+        elements.append(job_table)
+        elements.append(Spacer(1, 0.3*inch))
+    
+    # Payment History
+    if payments:
+        elements.append(Paragraph("Payment History", heading_style))
+        
+        payment_data = [['Date', 'Job', 'Amount', 'Notes']]
+        for payment in payments:
+            date_str = payment['date']
+            if isinstance(date_str, str):
+                date_obj = datetime.fromisoformat(date_str)
+            else:
+                date_obj = date_str
+            
+            payment_data.append([
+                date_obj.strftime('%m/%d/%Y'),
+                payment.get('job_name', 'General'),
+                f"${payment['amount']:,.2f}",
+                payment.get('notes', '-')[:30] if payment.get('notes') else '-'
+            ])
+        
+        # Add total row
+        payment_data.append(['', 'TOTAL RECEIVED:', f"${total_payments:,.2f}", ''])
+        
+        payment_table = Table(payment_data, colWidths=[1*inch, 1.8*inch, 1.2*inch, 2*inch])
+        payment_table.setStyle(TableStyle([
+            # Header
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#344E41')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            
+            # Data rows
+            ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -2), 9),
+            ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -2), 0.5, colors.HexColor('#EAE6DF')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#FDFCFB')]),
+            ('TOPPADDING', (0, 1), (-1, -2), 8),
+            ('BOTTOMPADDING', (0, 1), (-1, -2), 8),
+            
+            # Total row
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, -1), (-1, -1), 11),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F5F3EE')),
+            ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#344E41')),
+            ('TOPPADDING', (0, -1), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, -1), (-1, -1), 10),
+        ]))
+        elements.append(payment_table)
+    
+    # Footer note
+    elements.append(Spacer(1, 0.5*inch))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.HexColor('#5C6B61'),
+        alignment=TA_CENTER
+    )
+    elements.append(Paragraph(
+        f"This statement was generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}",
+        footer_style
+    ))
+    
+    # Build PDF
+    doc.build(elements)
+    
+    pdf_data = buffer.getvalue()
+    buffer.close()
+    
+    filename = f"earnings_statement_{datetime.now().strftime('%Y%m%d')}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 
 # Include the router in the main app
 app.include_router(api_router)
