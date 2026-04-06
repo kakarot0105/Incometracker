@@ -25,34 +25,44 @@ export default function LoginPage() {
 
   return (
     <div 
-      className="min-h-screen flex items-center justify-center relative overflow-hidden"
-      style={{
-        background: 'linear-gradient(135deg, #FDFCFB 0%, #F5F3EE 100%)'
-      }}
+      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-6"
+      style={{ background: 'linear-gradient(135deg, #FDFCFB 0%, #F5F3EE 100%)' }}
       data-testid="login-page"
     >
-      <div className="absolute inset-0 opacity-5" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23344E41' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-      }}></div>
+      {/* Dot Grid Background */}
+      <div 
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `radial-gradient(circle, #344E41 1px, transparent 1px)`,
+          backgroundSize: '24px 24px',
+          opacity: 0.04
+        }}
+      />
 
-      <div className="relative z-10 w-full max-w-md px-6">
+      {/* Title Outside Card */}
+      <div className="relative z-10 text-center mb-6">
+        {/* Logo Mark */}
+        <div className="w-16 h-16 bg-[#344E41] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+          <span className="text-white text-xl font-semibold" style={{ fontFamily: 'Outfit' }}>IT</span>
+        </div>
+        <h1 className="text-4xl font-semibold tracking-tight text-[#344E41] mb-2" style={{ fontFamily: 'Outfit' }}>
+          Income Tracker
+        </h1>
+        <p className="text-base text-[#5C6B61]">
+          Track your hours, jobs, and earnings in one place
+        </p>
+      </div>
+
+      {/* Card */}
+      <div className="relative z-10 w-full max-w-sm">
         <div 
-          className="bg-white border border-[#EAE6DF] p-8 transition-transform duration-200 hover:-translate-y-[2px] hover:shadow-sm"
+          className="bg-white border border-[#EAE6DF] rounded-2xl p-6 shadow-sm"
           data-testid="login-card"
         >
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-semibold tracking-tight text-[#344E41] mb-3" style={{ fontFamily: 'Outfit' }}>
-              Income Tracker
-            </h1>
-            <p className="text-base leading-relaxed text-[#5C6B61]">
-              Track your hours, jobs, and earnings in one place
-            </p>
-          </div>
-
           <button
             onClick={handleGoogleLogin}
             data-testid="google-login-button"
-            className="w-full bg-[#344E41] hover:bg-[#2B3A28] text-white py-3 px-6 flex items-center justify-center gap-3 transition-all duration-200 font-medium"
+            className="w-full bg-[#344E41] hover:bg-[#2B3A28] hover:shadow-md active:scale-[0.98] text-white py-3 px-6 flex items-center justify-center gap-3 transition-all duration-200 font-medium rounded-xl"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M19.8 10.2273C19.8 9.51818 19.7364 8.83637 19.6182 8.18182H10.2V12.05H15.5818C15.3273 13.3 14.5636 14.3591 13.4182 15.0682V17.5773H16.7364C18.7091 15.7682 19.8 13.2364 19.8 10.2273Z" fill="#4285F4"/>
@@ -64,7 +74,7 @@ export default function LoginPage() {
           </button>
 
           <div className="mt-6 text-center">
-            <p className="text-sm font-medium text-[#5C6B61]">
+            <p className="text-sm text-[#5C6B61]">
               Securely track your freelance income
             </p>
           </div>
