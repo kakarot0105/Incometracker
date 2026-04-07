@@ -31,6 +31,13 @@ jobs:
           
           # Build frontend
           cd ../frontend
+          
+          # Use Node 18 LTS (react-scripts@5 is incompatible with Node 20+)
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          nvm use 18 2>/dev/null || nvm install 18 && nvm use 18
+          node --version
+          
           npm install --legacy-peer-deps
           CI=false npm run build || { echo "❌ Frontend build FAILED!"; exit 1; }
           
