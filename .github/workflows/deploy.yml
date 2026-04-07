@@ -39,8 +39,18 @@ jobs:
           echo "Using Node.js: $(node -v)"
           
           rm -rf node_modules
-          npm install --legacy-peer-deps
-          CI=false npm run build
+          npm install --legacy-peer-deps > build.log 2>&1 || {
+            cp build.log /var/www/trackyourbucks/error.txt
+            chmod 755 /var/www/trackyourbucks/error.txt
+            echo "❌ npm install failed, error log served at /error.txt"
+            exit 1
+          }
+          CI=false npm run build >> build.log 2>&1 || {
+            cp build.log /var/www/trackyourbucks/error.txt
+            chmod 755 /var/www/trackyourbucks/error.txt
+            echo "❌ npm run build failed, error log served at /error.txt"
+            exit 1
+          }
           
           # Clean up local node
           rm -rf node-v18.20.4-linux-x64
