@@ -31,9 +31,19 @@ jobs:
           
           # Build frontend
           cd ../frontend
+          
+          # Force Node 18 without needing sudo or nvm
+          echo "Downloading Node 18..."
+          wget -qO- https://nodejs.org/dist/v18.20.4/node-v18.20.4-linux-x64.tar.gz | tar -xz
+          export PATH=$PWD/node-v18.20.4-linux-x64/bin:$PATH
+          echo "Using Node.js: $(node -v)"
+          
           rm -rf node_modules
           npm install --legacy-peer-deps
           CI=false npm run build
+          
+          # Clean up local node
+          rm -rf node-v18.20.4-linux-x64
           
           # Only sync if build produced files
           if [ -f "build/index.html" ]; then
