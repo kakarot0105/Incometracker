@@ -32,7 +32,10 @@ jobs:
           # Build frontend
           cd ../frontend
           npm install --legacy-peer-deps
-          CI=false npm run build
+          CI=false npm run build || { echo "❌ Frontend build FAILED!"; exit 1; }
+          
+          # Verify build output exists
+          [ -d "build" ] && [ "$(ls -A build)" ] || { echo "❌ Build directory is empty!"; exit 1; }
           
           # Sync build to Nginx web root
           rsync -av --delete build/ /var/www/trackyourbucks/
