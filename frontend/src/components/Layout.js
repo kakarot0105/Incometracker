@@ -1,4 +1,5 @@
-import { Outlet, Link, useLocation, useNavigate, useEffect } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Briefcase, Clock, CreditCard, LayoutDashboard, FileText, LogOut, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
