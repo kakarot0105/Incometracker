@@ -31,21 +31,8 @@ jobs:
           
           # Build frontend
           cd ../frontend
-          
-          # Ensure Node 18 LTS is installed (react-scripts@5 breaks on Node 20+)
-          node_version=$(node --version 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1)
-          if [ -z "$node_version" ] || [ "$node_version" -gt 18 ]; then
-            echo "Installing Node 18 LTS via NodeSource..."
-            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-            apt-get install -y nodejs
-          fi
-          echo "Node version: $(node --version)"
-          
           npm install --legacy-peer-deps
-          CI=false npm run build || { echo "❌ Frontend build FAILED!"; exit 1; }
-          
-          # Verify build output exists
-          [ -d "build" ] && [ "$(ls -A build)" ] || { echo "❌ Build directory is empty!"; exit 1; }
+          CI=false npm run build
           
           # Sync build to Nginx web root
           rsync -av --delete build/ /var/www/trackyourbucks/
