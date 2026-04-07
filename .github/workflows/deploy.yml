@@ -31,13 +31,18 @@ jobs:
           
           # Build frontend
           cd ../frontend
+          rm -rf node_modules
           npm install --legacy-peer-deps
           CI=false npm run build
           
-          # Sync build to Nginx web root
-          rsync -av --delete build/ /var/www/trackyourbucks/
-          
-          # Reload Nginx
-          systemctl reload nginx
-          
-          echo "✅ Deployment complete!"
+          # Only sync if build produced files
+          if [ -f "build/index.html" ]; then
+            rsync -av --delete build/ /var/www/trackyourbucks/
+            chmod -R 755 /var/www/trackyourbucks/
+            chown -R www-data:www-data /var/www/trackyourbucks/
+            systemctl reload nginx
+            echo "✅ Deployment complete!"
+          else
+            echo "❌ Build failed - no index.html found, skipping deploy"
+            exit 1
+          fi
