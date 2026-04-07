@@ -32,11 +32,14 @@ jobs:
           # Build frontend
           cd ../frontend
           
-          # Use Node 18 LTS (react-scripts@5 is incompatible with Node 20+)
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          nvm use 18 2>/dev/null || nvm install 18 && nvm use 18
-          node --version
+          # Ensure Node 18 LTS is installed (react-scripts@5 breaks on Node 20+)
+          node_version=$(node --version 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1)
+          if [ -z "$node_version" ] || [ "$node_version" -gt 18 ]; then
+            echo "Installing Node 18 LTS via NodeSource..."
+            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+            apt-get install -y nodejs
+          fi
+          echo "Node version: $(node --version)"
           
           npm install --legacy-peer-deps
           CI=false npm run build || { echo "❌ Frontend build FAILED!"; exit 1; }
