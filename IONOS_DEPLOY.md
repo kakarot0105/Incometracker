@@ -1,62 +1,47 @@
-# 🚀 IONOS VPS Deployment Guide
+# IONOS VPS Deployment Guide
 
-## Complete setup for Income Tracker on IONOS VPS M
+This guide documents the current deployment approach for Income Tracker on an IONOS VPS running Ubuntu.
 
----
+## Overview
 
-## 📋 Prerequisites
+The app is deployed as:
 
-- ✅ IONOS VPS M purchased (2GB RAM, 80GB disk)
-- ✅ Ubuntu 22.04 installed
-- ✅ SSH access details from IONOS
+- FastAPI backend running on port `8000`
+- React frontend built to static files
+- Nginx serving the frontend and reverse proxying the backend
+- MongoDB running on the VPS
+- PM2 used to keep the backend process alive
 
----
+## Prerequisites
 
-## 🔑 Step 1: Connect to Your Server
+- IONOS VPS with Ubuntu
+- SSH access
+- A domain or public IP
+- Google OAuth credentials
 
-IONOS will email you:
-- **IP Address:** (e.g., 123.45.67.89)
-- **Username:** root
-- **Password:** (temporary)
+## 1. Connect to the Server
 
-### Connect via SSH:
 ```bash
-ssh root@YOUR_IP_ADDRESS
-# Enter password when prompted
-# Change password on first login
+ssh root@YOUR_SERVER_IP
 ```
 
----
+## 2. Install System Packages
 
-## 🛠️ Step 2: Initial Server Setup
-
-Run these commands one by one:
-
-### Update system:
 ```bash
 apt update && apt upgrade -y
-```
-
-### Install essential packages:
-```bash
 apt install -y git curl wget nginx python3 python3-pip python3-venv nodejs npm mongodb
-```
-
-### Install PM2 (process manager):
-```bash
 npm install -g pm2
 ```
 
-### Create deployment user:
+Optional but recommended:
+
 ```bash
 adduser deploy
 usermod -aG sudo deploy
 su - deploy
 ```
 
----
-
-## 📥 Step 3: Clone Your Repository
+## 3. Clone the Repository
 
 ```bash
 cd /home/deploy
@@ -64,11 +49,8 @@ git clone https://github.com/kakarot0105/Incometracker.git
 cd Incometracker
 ```
 
----
+## 4. Backend Setup
 
-## 🐍 Step 4: Setup Backend (FastAPI)
-
-### Create Python virtual environment:
 ```bash
 cd /home/deploy/Incometracker/backend
 python3 -m venv venv
@@ -76,349 +58,165 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Create environment file:
-```bash
-nano .env
-```
+Create `backend/.env`:
 
-Add:
 ```env
-MONGODB_URL=mongodb://localhost:27017/incometracker
-JWT_SECRET=your-super-secret-key-change-this
-PORT=8000
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=incometracker
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=https://yourdomain.com/auth/callback
+COOKIE_SECURE=true
+CORS_ORIGINS=https://yourdomain.com
 ```
 
-Save: `Ctrl+X`, `Y`, `Enter`
+If you are deploying by IP only for initial testing, you can temporarily use:
 
-### Start backend with PM2:
+```env
+GOOGLE_REDIRECT_URI=http://YOUR_SERVER_IP/auth/callback
+CORS_ORIGINS=http://YOUR_SERVER_IP
+COOKIE_SECURE=false
+```
+
+Start the backend with PM2:
+
 ```bash
-pm2 start "uvicorn server:app --host 0.0.0.0 --port 8000" --name incometracker-backend
+cd /home/deploy/Incometracker/backend
+pm2 start "venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000" --name incometracker-backend
 pm2 save
 pm2 startup
 ```
 
----
+## 5. Frontend Setup
 
-## ⚛️ Step 5: Setup Frontend (React)
-
-### Install dependencies and build:
 ```bash
 cd /home/deploy/Incometracker/frontend
 npm install
 ```
 
-### Create production environment:
-```bash
-nano .env.production
-```
+Create `frontend/.env.production`:
 
-Add:
 ```env
-REACT_APP_API_URL=http://YOUR_IP_ADDRESS/api
+REACT_APP_BACKEND_URL=https://yourdomain.com
+REACT_APP_GOOGLE_CLIENT_ID=your-google-client-id
 ```
 
-Save and build:
+Build the frontend:
+
 ```bash
 npm run build
 ```
 
----
+## 6. Nginx Configuration
 
-## 🌐 Step 6: Configure Nginx
+Create `/etc/nginx/sites-available/incometracker`:
 
-### Create Nginx config:
-```bash
-sudo nano /etc/nginx/sites-available/incometracker
-```
-
-Paste this:
 ```nginx
 server {
     listen 80;
-    server_name YOUR_IP_ADDRESS;
+    server_name yourdomain.com YOUR_SERVER_IP;
 
-    # Frontend
+    root /home/deploy/Incometracker/frontend/build;
+    index index.html;
+
     location / {
-        root /home/deploy/Incometracker/frontend/build;
-        try_files $uri $uri/ /index.html;
+        try_files $uri /index.html;
     }
 
-    # Backend API
-    location /api {
-        rewrite ^/api/(.*) /$1 break;
-        proxy_pass http://localhost:8000;
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
-
-    # Gzip compression
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
 }
 ```
 
-Save and activate:
+Enable it:
+
 ```bash
-sudo ln -s /etc/nginx/sites-available/incometracker /etc/nginx/sites-enabled/
-sudo rm /etc/nginx/sites-enabled/default
+sudo ln -s /etc/nginx/sites-available/incometracker /etc/nginx/sites-enabled/incometracker
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl restart nginx
 ```
 
----
+## 7. MongoDB
 
-## 🗄️ Step 7: Configure MongoDB
+Start and enable MongoDB:
 
-### Secure MongoDB:
 ```bash
 sudo systemctl start mongodb
 sudo systemctl enable mongodb
 ```
 
-### Create database and user:
+For a simple single-server setup, the default local MongoDB instance is enough. If you later add authentication to MongoDB itself, update `MONGO_URL` accordingly.
+
+## 8. HTTPS
+
+Once DNS is pointed at the VPS, install TLS with Certbot:
+
 ```bash
-mongosh
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com
 ```
 
-In MongoDB shell:
-```javascript
-use incometracker
-db.createUser({
-  user: "incometracker",
-  pwd: "secure-password-here",
-  roles: ["readWrite"]
-})
-exit
-```
+After HTTPS is enabled, keep these production settings:
 
-### Update backend .env with credentials:
-```bash
-cd /home/deploy/Incometracker/backend
-nano .env
-```
-
-Update:
 ```env
-MONGODB_URL=mongodb://incometracker:secure-password-here@localhost:27017/incometracker
+GOOGLE_REDIRECT_URI=https://yourdomain.com/auth/callback
+REACT_APP_BACKEND_URL=https://yourdomain.com
+COOKIE_SECURE=true
+CORS_ORIGINS=https://yourdomain.com
 ```
 
-Restart backend:
+Then rebuild the frontend and restart the backend:
+
 ```bash
+cd /home/deploy/Incometracker/frontend
+npm run build
+
+cd /home/deploy/Incometracker/backend
 pm2 restart incometracker-backend
 ```
 
----
-
-## 🔥 Step 8: Setup Firewall
+## 9. Updating the App
 
 ```bash
-sudo ufw allow 22/tcp    # SSH
-sudo ufw allow 80/tcp    # HTTP
-sudo ufw allow 443/tcp   # HTTPS (for later)
-sudo ufw enable
-```
-
----
-
-## ✅ Step 9: Verify Deployment
-
-### Check services:
-```bash
-pm2 status                    # Backend should be running
-sudo systemctl status nginx   # Nginx should be active
-sudo systemctl status mongodb # MongoDB should be active
-```
-
-### Test your app:
-Open browser: `http://YOUR_IP_ADDRESS`
-
----
-
-## 🔄 Step 10: Auto-Deploy Updates
-
-Create update script:
-```bash
-nano /home/deploy/update.sh
-```
-
-Paste:
-```bash
-#!/bin/bash
 cd /home/deploy/Incometracker
 git pull origin main
 
-# Update backend
 cd backend
 source venv/bin/activate
 pip install -r requirements.txt
 pm2 restart incometracker-backend
 
-# Update frontend
 cd ../frontend
 npm install
 npm run build
 
-# Restart nginx
-sudo systemctl reload nginx
-
-echo "✅ Deployment updated!"
-```
-
-Make executable:
-```bash
-chmod +x /home/deploy/update.sh
-```
-
-### To update later:
-```bash
-/home/deploy/update.sh
-```
-
----
-
-## 🌐 Step 11: Add Domain (Optional)
-
-If you have a domain (e.g., from Porkbun):
-
-### Update DNS:
-- Type: **A Record**
-- Name: **@**
-- Value: **YOUR_IP_ADDRESS**
-- TTL: **3600**
-
-### Update Nginx:
-```bash
-sudo nano /etc/nginx/sites-available/incometracker
-```
-
-Change:
-```nginx
-server_name YOUR_IP_ADDRESS;
-```
-
-To:
-```nginx
-server_name yourdomain.com www.yourdomain.com;
-```
-
-Restart:
-```bash
-sudo nginx -t
 sudo systemctl reload nginx
 ```
 
----
+## 10. Verification
 
-## 🔒 Step 12: Add HTTPS (Free with Let's Encrypt)
+Check running services:
 
 ```bash
-sudo apt install certbot python3-certbot-nginx -y
-sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
-```
-
-Follow prompts, select "Redirect HTTP to HTTPS"
-
-Auto-renewal:
-```bash
-sudo certbot renew --dry-run
-```
-
----
-
-## 📊 Monitoring
-
-### View backend logs:
-```bash
-pm2 logs incometracker-backend
-```
-
-### View Nginx logs:
-```bash
-sudo tail -f /var/log/nginx/access.log
-sudo tail -f /var/log/nginx/error.log
-```
-
-### Check MongoDB:
-```bash
-mongosh
-use incometracker
-db.stats()
-```
-
----
-
-## 🆘 Troubleshooting
-
-### Backend not starting?
-```bash
-pm2 logs incometracker-backend
-cd /home/deploy/Incometracker/backend
-source venv/bin/activate
-python3 -m uvicorn server:app --host 0.0.0.0 --port 8000
-```
-
-### Frontend not showing?
-```bash
-ls -la /home/deploy/Incometracker/frontend/build
-sudo nginx -t
+pm2 status
 sudo systemctl status nginx
-```
-
-### MongoDB connection failed?
-```bash
 sudo systemctl status mongodb
-mongosh
 ```
 
----
+Open the app:
 
-## 🎉 You're Done!
+- `https://yourdomain.com`
+- or `http://YOUR_SERVER_IP` during early setup
 
-Your app is now live at:
-- **HTTP:** http://YOUR_IP_ADDRESS
-- **HTTPS:** https://yourdomain.com (if configured)
+## Notes
 
-**24/7 uptime, full control, $4/month!** 🚀
-
----
-
-## 💾 Backup (Important!)
-
-### Manual backup:
-```bash
-mongodump --db incometracker --out /home/deploy/backups/$(date +%Y%m%d)
-```
-
-### Setup auto-backup (daily at 2 AM):
-```bash
-crontab -e
-```
-
-Add:
-```cron
-0 2 * * * mongodump --db incometracker --out /home/deploy/backups/$(date +\%Y\%m\%d)
-```
-
----
-
-## 🔄 Maintenance
-
-### Update system monthly:
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo reboot
-```
-
-### Update app:
-```bash
-/home/deploy/update.sh
-```
-
----
-
-**Need help? Just ask!** 🤝
+- The backend expects `MONGO_URL`, not `MONGODB_URL`.
+- The frontend expects `REACT_APP_BACKEND_URL`, not `REACT_APP_API_URL`.
+- Google OAuth must include the exact callback URL you deploy, including protocol and domain.

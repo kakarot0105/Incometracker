@@ -1,196 +1,144 @@
-# 🔐 Authentication Setup Guide
+# Authentication Setup
 
-## Current Issue
+Income Tracker already uses Google OAuth in the current codebase. This document explains how to configure it correctly.
 
-Your app currently uses **Emergent's authentication service**. Since we're removing Emergent branding, you need to set up your own auth.
+## What the App Uses
 
----
+The current implementation is:
 
-## ✅ **Recommended: Google OAuth (Free & Easy)**
+- frontend starts Google OAuth from `frontend/src/pages/LoginPage.js`
+- Google redirects to `/auth/callback`
+- frontend sends the OAuth code to `POST /api/auth/google`
+- backend exchanges the code with Google
+- backend creates a session in MongoDB
+- backend sets an HTTP-only `session_token` cookie
 
-### **Option 1: Direct Google OAuth** ⭐ BEST (Free Forever)
+No extra auth provider is required.
 
-**Setup Steps:**
+## Required Backend Environment Variables
 
-1. **Go to Google Cloud Console**
-   - Visit: https://console.cloud.google.com
+Set these in `backend/.env`:
 
-2. **Create New Project**
-   - Click "Select a project" → "New Project"
-   - Name: "Income Tracker"
-   - Click "Create"
-
-3. **Enable Google+ API**
-   - Go to "APIs & Services" → "Library"
-   - Search "Google+ API"
-   - Click "Enable"
-
-4. **Create OAuth Credentials**
-   - Go to "APIs & Services" → "Credentials"
-   - Click "Create Credentials" → "OAuth client ID"
-   - Application type: "Web application"
-   - Name: "Income Tracker Web"
-   
-5. **Configure OAuth Consent Screen**
-   - User type: "External"
-   - App name: "Income Tracker"
-   - User support email: your email
-   - Developer contact: your email
-   - Scopes: email, profile
-   - Test users: Add your email
-
-6. **Add Authorized URLs**
-   - Authorized JavaScript origins:
-     ```
-     http://localhost:3000
-     http://YOUR_IP_ADDRESS
-     https://yourdomain.com (if you have one)
-     ```
-   
-   - Authorized redirect URIs:
-     ```
-     http://localhost:3000/auth/callback
-     http://YOUR_IP_ADDRESS/auth/callback
-     https://yourdomain.com/auth/callback
-     ```
-
-7. **Get Your Credentials**
-   - Copy "Client ID"
-   - Copy "Client Secret"
-
-8. **Update Your Code**
-
-   **Backend (.env file):**
-   ```env
-   GOOGLE_CLIENT_ID=your-client-id-here
-   GOOGLE_CLIENT_SECRET=your-client-secret-here
-   GOOGLE_REDIRECT_URI=http://YOUR_IP_ADDRESS/auth/callback
-   ```
-
-   **Frontend (LoginPage.js):**
-   ```javascript
-   const handleGoogleLogin = () => {
-     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-     const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
-     const scope = encodeURIComponent('email profile');
-     const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
-     window.location.href = googleAuthUrl;
-   };
-   ```
-
----
-
-## 🔧 **Backend Changes Needed**
-
-### Update `backend/server.py`:
-
-Add Google OAuth handler:
-```python
-from fastapi import FastAPI, HTTPException
-import requests
-import os
-
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
-
-@app.get("/api/auth/callback")
-async def google_callback(code: str):
-    # Exchange code for token
-    token_url = "https://oauth2.googleapis.com/token"
-    token_data = {
-        "code": code,
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "redirect_uri": GOOGLE_REDIRECT_URI,
-        "grant_type": "authorization_code"
-    }
-    
-    token_response = requests.post(token_url, data=token_data)
-    token_json = token_response.json()
-    access_token = token_json.get("access_token")
-    
-    # Get user info
-    user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    user_response = requests.get(user_info_url, headers=headers)
-    user_data = user_response.json()
-    
-    # Create/login user
-    user_email = user_data.get("email")
-    user_name = user_data.get("name")
-    
-    # TODO: Save user to database, create session token
-    # For now, return user data
-    
-    return {"email": user_email, "name": user_name, "token": "session-token-here"}
+```env
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=incometracker
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:3000/auth/callback
+COOKIE_SECURE=false
+CORS_ORIGINS=http://localhost:3000
 ```
 
----
+For production on your VPS with HTTPS:
 
-## 🎯 **Alternative Options**
-
-### **Option 2: Supabase Auth** (Easier, Managed)
-- **Free tier:** 50,000 monthly active users
-- **Setup:** 5 minutes
-- **Includes:** Google, GitHub, email/password
-- **Website:** https://supabase.com
-
-### **Option 3: Firebase Auth** (Google's Service)
-- **Free tier:** Unlimited users
-- **Setup:** 10 minutes
-- **Includes:** Google, email/password, social logins
-- **Website:** https://firebase.google.com
-
-### **Option 4: Clerk** (Modern Auth Platform)
-- **Free tier:** 5,000 monthly active users
-- **Setup:** 5 minutes
-- **Best UX:** Beautiful pre-built components
-- **Website:** https://clerk.com
-
----
-
-## 💡 **My Recommendation**
-
-**For your use case:** Direct Google OAuth (Option 1)
-
-**Why:**
-- ✅ 100% free forever
-- ✅ You own the auth flow
-- ✅ No third-party dependencies
-- ✅ Simple for single-provider auth
-
-**If you want easier setup:** Supabase (Option 2)
-- ✅ Managed service
-- ✅ Database included
-- ✅ Real-time features
-- ✅ Free tier is generous
-
----
-
-## 🚨 **For Now (Testing Only)**
-
-I've created a **temporary workaround** for local testing:
-
-**File:** `frontend/src/pages/LoginPage.js`
-```javascript
-// TEMPORARY: Skip auth for testing
-const handleGoogleLogin = () => {
-  localStorage.setItem('session_token', 'test-token');
-  window.location.href = '/';
-};
+```env
+GOOGLE_REDIRECT_URI=https://yourdomain.com/auth/callback
+COOKIE_SECURE=true
+CORS_ORIGINS=https://yourdomain.com
 ```
 
-**⚠️ This is INSECURE! Only for local testing!**
+## Required Frontend Environment Variables
 
----
+Set these in `frontend/.env` for local development:
 
-## ✅ **Once Deployed**
+```env
+REACT_APP_BACKEND_URL=http://localhost:8000
+REACT_APP_GOOGLE_CLIENT_ID=your-google-client-id
+```
 
-You MUST implement proper authentication before going live!
+For production builds:
 
-Choose one of the options above and follow the setup guide.
+```env
+REACT_APP_BACKEND_URL=https://yourdomain.com
+REACT_APP_GOOGLE_CLIENT_ID=your-google-client-id
+```
 
----
+## Google Cloud Console Setup
 
-Need help setting up auth? Let me know which option you prefer! 🔐
+1. Go to Google Cloud Console.
+2. Create or select a project.
+3. Configure the OAuth consent screen.
+4. Create an OAuth client of type `Web application`.
+5. Add allowed origins.
+6. Add allowed redirect URIs.
+
+### Recommended Local Values
+
+Authorized JavaScript origins:
+
+```text
+http://localhost:3000
+```
+
+Authorized redirect URIs:
+
+```text
+http://localhost:3000/auth/callback
+```
+
+### Recommended Production Values
+
+Authorized JavaScript origins:
+
+```text
+https://yourdomain.com
+```
+
+Authorized redirect URIs:
+
+```text
+https://yourdomain.com/auth/callback
+```
+
+If you temporarily test by IP address before DNS is ready, use the IP-based versions too.
+
+## Important Behavior
+
+- The frontend uses `window.location.origin + '/auth/callback'` as the redirect target.
+- The backend accepts the redirect URI sent by the frontend unless `GOOGLE_REDIRECT_URI` is explicitly set.
+- The session is stored in MongoDB collection `user_sessions`.
+- Authentication checks rely on the `session_token` cookie and `withCredentials: true` requests from the frontend.
+
+## Common Problems
+
+### Redirect URI mismatch
+
+Cause:
+- The URL in Google Cloud does not exactly match the deployed callback URL.
+
+Fix:
+- Make sure protocol, domain, port, and path all match exactly.
+
+### Login works locally but not on production
+
+Cause:
+- Wrong `CORS_ORIGINS`
+- `COOKIE_SECURE` not enabled for HTTPS
+- Wrong `REACT_APP_BACKEND_URL`
+
+Fix:
+- Set:
+
+```env
+COOKIE_SECURE=true
+CORS_ORIGINS=https://yourdomain.com
+REACT_APP_BACKEND_URL=https://yourdomain.com
+```
+
+### Browser is not sending session cookies
+
+Cause:
+- Frontend requests are missing credentials
+- cookie/security settings do not match deployment mode
+
+Fix:
+- Keep `withCredentials: true` in frontend requests
+- use HTTPS in production
+- set `COOKIE_SECURE=true` in production
+
+## Source Files
+
+- `backend/server.py`
+- `frontend/src/pages/LoginPage.js`
+- `frontend/src/pages/AuthCallback.js`
+- `frontend/src/components/ProtectedRoute.js`
