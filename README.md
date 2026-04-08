@@ -25,8 +25,16 @@ Legacy deployment files for Render and Fly.io have been removed so the repositor
 - View dashboard totals and job breakdowns
 - Generate invoice PDFs
 - Generate monthly timesheet PDFs
+- Generate monthly timesheet PDFs
 - Generate earnings statement PDFs
 
+## Design System
+
+Income Tracker utilizes a custom **Modern Fintech Blend** design philosophy that borrows precision elements from industry leaders:
+- **Foundation (Stripe):** Clean white space, deep navy (`#061b31`) typography instead of harsh black, and premium blue-tinted multi-layer shadows (`rgba(50,50,93,0.25)`).
+- **Typography:** Uses the `Inter` variable font exclusively, configured with OpenType features (`cv01`, `ss03`) for a highly geometric, modern look. Monetary amounts use tabular figures (`tnum`) for perfect vertical alignment in data tables. Big metrics utilize "whisper-weight" styling (font-weight 300 with negative letter spacing).
+- **Structure (Vercel):** Dense, exact, and minimalist monochromatic data grids.
+- **Accents (Raycast):** While the core app is rigorously strict, the primary Call to Actions and main "Total Income" metrics feature vibrant, glowing Ruby-to-Magenta gradient accents to make the UI feel alive.
 ## Repository Structure
 
 ```text

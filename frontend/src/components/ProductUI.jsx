@@ -13,20 +13,17 @@ export function PageHero({
   return (
     <section
       className={cn(
-        'app-panel-solid relative overflow-hidden rounded-[32px] px-6 py-7 md:px-8 md:py-8',
+        'fintech-card px-8 py-10 md:px-12 md:py-16 relative overflow-hidden',
         className
       )}
       data-testid={testId}
     >
-      <div className="pointer-events-none absolute -right-8 top-0 h-36 w-36 rounded-full bg-[rgba(167,239,138,0.16)] blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-16 left-0 h-36 w-36 rounded-full bg-[rgba(239,193,119,0.16)] blur-3xl" />
-
-      <div className="relative z-10 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+      <div className="relative z-10 flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
         <div className="max-w-2xl">
-          {eyebrow ? <div className="page-eyebrow">{eyebrow}</div> : null}
-          <h1 className={cn('page-title mt-4', titleClassName)}>{title}</h1>
-          {description ? <p className="page-subtitle mt-3 max-w-xl">{description}</p> : null}
-          {actions ? <div className="mt-5 flex flex-wrap gap-3">{actions}</div> : null}
+          {eyebrow ? <div className="text-xs font-semibold tracking-widest uppercase text-primary mb-4">{eyebrow}</div> : null}
+          <h1 className={cn('text-4xl sm:text-5xl lg:text-6xl font-light tracking-extratight text-foreground', titleClassName)}>{title}</h1>
+          {description ? <p className="mt-4 text-lg leading-relaxed text-muted-foreground max-w-xl">{description}</p> : null}
+          {actions ? <div className="mt-8 flex flex-wrap gap-4">{actions}</div> : null}
         </div>
 
         {children ? <div className="w-full max-w-xl">{children}</div> : null}
@@ -44,32 +41,31 @@ export function MetricPanel({
   className,
   testId,
 }) {
+  // If tone is spotlight, we apply the glow
+  const isSpotlight = tone === 'spotlight';
+
   return (
     <article
-      className={cn('app-panel-solid relative overflow-hidden rounded-[30px] p-5 md:p-6', className)}
+      className={cn('metric-block', className)}
       data-testid={testId}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607166]">{label}</p>
-          <p className="metric-value mt-4 text-[#173229]">{value}</p>
-          {detail ? <p className="mt-3 max-w-[18rem] text-sm leading-6 text-[#5a6d61]">{detail}</p> : null}
+          <p className="metric-label">{label}</p>
+          <p className={cn("metric-value mt-3", isSpotlight ? "text-glow font-normal" : "text-foreground")}>{value}</p>
+          {detail ? <p className="mt-2 max-w-[18rem] text-sm leading-6 text-muted-foreground">{detail}</p> : null}
         </div>
 
         {Icon ? (
           <div
             className={cn(
-              'flex h-12 w-12 items-center justify-center rounded-[16px]',
-              tone === 'fresh'
-                ? 'bg-[#a7ef8a]/35 text-[#1d4427]'
-                : tone === 'warm'
-                  ? 'bg-[#f3c5b7]/45 text-[#8a4d36]'
-                  : tone === 'pine'
-                    ? 'bg-[#173229] text-white'
-                    : 'bg-[#173229]/8 text-[#173229]'
+              'flex h-12 w-12 items-center justify-center rounded-lg',
+              tone === 'spotlight'
+                ? 'bg-primary/10 text-primary'
+                : 'bg-secondary text-secondary-foreground'
             )}
           >
-            <Icon size={20} />
+            <Icon size={20} strokeWidth={1.5} />
           </div>
         ) : null}
       </div>
@@ -79,13 +75,13 @@ export function MetricPanel({
 
 export function SectionHeading({ eyebrow, title, description, meta, className }) {
   return (
-    <div className={cn('flex flex-col gap-4 border-b border-border/70 pb-5 sm:flex-row sm:items-end sm:justify-between', className)}>
+    <div className={cn('flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between', className)}>
       <div>
-        {eyebrow ? <div className="page-eyebrow">{eyebrow}</div> : null}
-        <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+        {eyebrow ? <div className="text-xs font-medium tracking-widest uppercase text-primary mb-2">{eyebrow}</div> : null}
+        <h2 className="text-2xl font-light tracking-tight text-foreground">
           {title}
         </h2>
-        {description ? <p className="mt-2 text-sm leading-7 text-[#5a6d61]">{description}</p> : null}
+        {description ? <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
       </div>
 
       {meta ? <div>{meta}</div> : null}
@@ -101,18 +97,18 @@ export function EmptyWorkspaceState({
   testId,
 }) {
   return (
-    <div className="app-panel-solid rounded-[32px] p-12 text-center" data-testid={testId}>
+    <div className="fintech-card p-12 text-center" data-testid={testId}>
       <div className="mx-auto max-w-md">
         {Icon ? (
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#a7ef8a]/25 text-[#173229]">
-            <Icon size={28} />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-xl bg-secondary text-muted-foreground mb-6">
+            <Icon size={28} strokeWidth={1.5} />
           </div>
         ) : null}
-        <h3 className="mt-6 text-3xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+        <h3 className="text-2xl font-light tracking-tight text-foreground">
           {title}
         </h3>
-        <p className="mt-3 text-base leading-7 text-[#5a6d61]">{description}</p>
-        {action ? <div className="mt-6">{action}</div> : null}
+        <p className="mt-3 text-base leading-relaxed text-muted-foreground">{description}</p>
+        {action ? <div className="mt-8">{action}</div> : null}
       </div>
     </div>
   );
