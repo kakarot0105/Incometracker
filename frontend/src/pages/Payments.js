@@ -1,85 +1,89 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Plus, Trash2, CreditCard, Download } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { CreditCard, Download, Plus, ReceiptText, Trash2, Wallet } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  EmptyWorkspaceState,
+  MetricPanel,
+  PageHero,
+  SectionHeading,
+} from '@/components/ProductUI';
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatHours,
+  formatInteger,
+  formatMonthLabel,
+  formatShortDate,
+} from '@/lib/formatters';
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-// EmptyState Component
-function EmptyState({ onAddClick }) {
+function PaymentsSkeletonPanel() {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="w-20 h-20 rounded-2xl bg-[#F0EDE8] flex items-center justify-center mb-6">
-        <CreditCard size={32} className="text-[#A3B18A]" />
+    <div className="app-panel-solid rounded-[32px] p-6 md:p-8">
+      <div className="mb-6 h-5 w-28 rounded-full bg-[#ece5d8] animate-pulse" />
+      <div className="space-y-4">
+        <div className="h-20 rounded-[24px] bg-[#f1eadf] animate-pulse" />
+        <div className="h-20 rounded-[24px] bg-[#ede4d8] animate-pulse" />
+        <div className="h-20 rounded-[24px] bg-[#f1eadf] animate-pulse" />
       </div>
-      <h3 className="text-xl font-medium text-[#344E41] mb-2" style={{ fontFamily: 'Outfit' }}>No payments recorded yet</h3>
-      <p className="text-base text-[#5C6B61] mb-6 text-center max-w-sm">Start recording payments to track your balance</p>
-      <Button onClick={onAddClick} className="bg-[#344E41] hover:bg-[#2B3A28] text-white flex items-center gap-2 rounded-lg"><Plus size={18} /> Record your first payment</Button>
     </div>
-  );
-}
-
-// Skeleton Row Component
-function SkeletonRow() {
-  return (
-    <tr className="border-b border-[#EAE6DF]">
-      <td className="px-6 py-4"><div className="h-4 w-24 bg-[#E8E5DF] rounded animate-pulse" /></td>
-      <td className="px-6 py-4"><div className="h-4 w-32 bg-[#E8E5DF] rounded animate-pulse" /></td>
-      <td className="px-6 py-4 text-right"><div className="h-4 w-20 bg-[#E8E5DF] rounded animate-pulse ml-auto" /></td>
-      <td className="px-6 py-4"><div className="h-4 w-40 bg-[#E8E5DF] rounded animate-pulse" /></td>
-      <td className="px-6 py-4 text-right"><div className="h-8 w-8 bg-[#E8E5DF] rounded animate-pulse ml-auto" /></td>
-    </tr>
   );
 }
 
 export default function Payments() {
   const [payments, setPayments] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [hoursLogs, setHoursLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [entryMode, setEntryMode] = useState('single');
   const [generatingStatement, setGeneratingStatement] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState(null);
-  
-  const [singleForm, setSingleForm] = useState({ job_id: '', amount: '', date: new Date().toISOString().split('T')[0], notes: '' });
-  const [monthlyPaymentForm, setMonthlyPaymentForm] = useState({ job_id: '', month: new Date().toISOString().slice(0, 7), amount_received: '', calculated_earnings: 0, hours_in_month: 0 });
-  
+
+  const [singleForm, setSingleForm] = useState({
+    job_id: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: '',
+  });
+  const [monthlyPaymentForm, setMonthlyPaymentForm] = useState({
+    job_id: '',
+    month: new Date().toISOString().slice(0, 7),
+    amount_received: '',
+  });
+
   useEffect(() => {
-    const calculateMonthlyEarnings = async () => {
-      if (monthlyPaymentForm.job_id && monthlyPaymentForm.month) {
-        try {
-          const response = await axios.get(`${BACKEND_URL}/api/hours`, { withCredentials: true });
-          const hoursLogs = response.data.filter(log => {
-            const logDate = log.date.slice(0, 7);
-            return log.job_id === monthlyPaymentForm.job_id && logDate === monthlyPaymentForm.month;
-          });
-          const totalEarnings = hoursLogs.reduce((sum, log) => sum + log.calculated_pay, 0);
-          const totalHours = hoursLogs.reduce((sum, log) => sum + log.hours_worked, 0);
-          setMonthlyPaymentForm(prev => ({ ...prev, calculated_earnings: totalEarnings, hours_in_month: totalHours }));
-        } catch (error) { console.error('Failed to calculate earnings:', error); }
-      }
-    };
-    calculateMonthlyEarnings();
-  }, [monthlyPaymentForm.job_id, monthlyPaymentForm.month]);
-  
-  useEffect(() => { fetchData(); }, []);
-  
+    fetchData();
+  }, []);
+
   const fetchData = async () => {
     try {
-      const [paymentsRes, jobsRes] = await Promise.all([
+      const [paymentsRes, jobsRes, hoursRes] = await Promise.all([
         axios.get(`${BACKEND_URL}/api/payments`, { withCredentials: true }),
-        axios.get(`${BACKEND_URL}/api/jobs`, { withCredentials: true })
+        axios.get(`${BACKEND_URL}/api/jobs`, { withCredentials: true }),
+        axios.get(`${BACKEND_URL}/api/hours`, { withCredentials: true }),
       ]);
       setPayments(paymentsRes.data);
       setJobs(jobsRes.data);
+      setHoursLogs(hoursRes.data);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       toast.error('Failed to load data');
@@ -87,18 +91,89 @@ export default function Payments() {
       setLoading(false);
     }
   };
-  
+
+  const resetForms = () => {
+    setSingleForm({
+      job_id: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      notes: '',
+    });
+    setMonthlyPaymentForm({
+      job_id: '',
+      month: new Date().toISOString().slice(0, 7),
+      amount_received: '',
+    });
+    setEntryMode('single');
+  };
+
+  const selectedMonthlyJob = jobs.find((job) => job.job_id === monthlyPaymentForm.job_id);
+  const monthlyEarnings = useMemo(() => {
+    if (!monthlyPaymentForm.job_id || !monthlyPaymentForm.month) {
+      return 0;
+    }
+
+    return hoursLogs
+      .filter(
+        (log) =>
+          log.job_id === monthlyPaymentForm.job_id &&
+          log.date.slice(0, 7) === monthlyPaymentForm.month
+      )
+      .reduce((sum, log) => sum + log.calculated_pay, 0);
+  }, [hoursLogs, monthlyPaymentForm.job_id, monthlyPaymentForm.month]);
+
+  const monthlyHours = useMemo(() => {
+    if (!monthlyPaymentForm.job_id || !monthlyPaymentForm.month) {
+      return 0;
+    }
+
+    return hoursLogs
+      .filter(
+        (log) =>
+          log.job_id === monthlyPaymentForm.job_id &&
+          log.date.slice(0, 7) === monthlyPaymentForm.month
+      )
+      .reduce((sum, log) => sum + log.hours_worked, 0);
+  }, [hoursLogs, monthlyPaymentForm.job_id, monthlyPaymentForm.month]);
+
+  const monthlyDifference = monthlyPaymentForm.amount_received
+    ? parseFloat(monthlyPaymentForm.amount_received) - monthlyEarnings
+    : 0;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     try {
       if (entryMode === 'single') {
-        await axios.post(`${BACKEND_URL}/api/payments`, { job_id: singleForm.job_id || null, amount: parseFloat(singleForm.amount), date: singleForm.date, notes: singleForm.notes || null }, { withCredentials: true });
+        await axios.post(
+          `${BACKEND_URL}/api/payments`,
+          {
+            job_id: singleForm.job_id || null,
+            amount: parseFloat(singleForm.amount),
+            date: singleForm.date,
+            notes: singleForm.notes || null,
+          },
+          { withCredentials: true }
+        );
         toast.success('Payment recorded successfully');
       } else {
         const paymentDate = `${monthlyPaymentForm.month}-01`;
-        await axios.post(`${BACKEND_URL}/api/payments`, { job_id: monthlyPaymentForm.job_id, amount: parseFloat(monthlyPaymentForm.amount_received), date: paymentDate, notes: `Payment for ${new Date(paymentDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}` }, { withCredentials: true });
+        await axios.post(
+          `${BACKEND_URL}/api/payments`,
+          {
+            job_id: monthlyPaymentForm.job_id,
+            amount: parseFloat(monthlyPaymentForm.amount_received),
+            date: paymentDate,
+            notes: `Payment for ${new Date(`${paymentDate}T12:00:00`).toLocaleDateString('en-US', {
+              month: 'long',
+              year: 'numeric',
+            })}`,
+          },
+          { withCredentials: true }
+        );
         toast.success('Payment recorded successfully');
       }
+
       setDialogOpen(false);
       resetForms();
       fetchData();
@@ -107,22 +182,25 @@ export default function Payments() {
       toast.error('Failed to record payment');
     }
   };
-  
-  const resetForms = () => {
-    setSingleForm({ job_id: '', amount: '', date: new Date().toISOString().split('T')[0], notes: '' });
-    setMonthlyPaymentForm({ job_id: '', month: new Date().toISOString().slice(0, 7), amount_received: '', calculated_earnings: 0, hours_in_month: 0 });
-  };
-  
+
   const handleDownloadStatement = async () => {
     setGeneratingStatement(true);
+
     try {
-      const response = await axios.get(`${BACKEND_URL}/api/reports/statement`, { withCredentials: true, responseType: 'blob' });
+      const response = await axios.get(`${BACKEND_URL}/api/reports/statement`, {
+        withCredentials: true,
+        responseType: 'blob',
+      });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
+
       const contentDisposition = response.headers['content-disposition'];
       const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
-      const filename = filenameMatch ? filenameMatch[1] : `earnings_statement_${Date.now()}.pdf`;
+      const filename = filenameMatch
+        ? filenameMatch[1]
+        : `earnings_statement_${Date.now()}.pdf`;
+
       link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
@@ -136,13 +214,16 @@ export default function Payments() {
       setGeneratingStatement(false);
     }
   };
-  
-  const handleDeleteClick = (payment) => { setPaymentToDelete(payment); setDeleteDialogOpen(true); };
-  
+
   const handleDeleteConfirm = async () => {
-    if (!paymentToDelete) return;
+    if (!paymentToDelete) {
+      return;
+    }
+
     try {
-      await axios.delete(`${BACKEND_URL}/api/payments/${paymentToDelete.payment_id}`, { withCredentials: true });
+      await axios.delete(`${BACKEND_URL}/api/payments/${paymentToDelete.payment_id}`, {
+        withCredentials: true,
+      });
       toast.success('Payment deleted successfully');
       fetchData();
     } catch (error) {
@@ -153,169 +234,444 @@ export default function Payments() {
       setPaymentToDelete(null);
     }
   };
-  
-  const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
-  
-  // Group payments by month
-  const groupedPayments = payments.reduce((acc, payment) => {
+
+  const totalReceived = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const assignedPayments = payments.filter((payment) => payment.job_name).length;
+  const groupedPayments = payments.reduce((accumulator, payment) => {
     const month = payment.date.slice(0, 7);
-    if (!acc[month]) acc[month] = [];
-    acc[month].push(payment);
-    return acc;
+    if (!accumulator[month]) {
+      accumulator[month] = [];
+    }
+    accumulator[month].push(payment);
+    return accumulator;
   }, {});
   const sortedMonths = Object.keys(groupedPayments).sort().reverse();
-  
+
   if (loading) {
     return (
-      <div data-testid="payments-page">
-        <div className="mb-8">
-          <h1 className="text-4xl font-semibold tracking-tight text-[#344E41] mb-2" style={{ fontFamily: 'Outfit' }}>Payments</h1>
-          <p className="text-base text-[#5C6B61]">Record payments received from clients</p>
-        </div>
-        <div className="bg-white border border-[#EAE6DF] rounded-xl">
-          <table className="w-full"><thead className="border-b border-[#EAE6DF]"><tr className="bg-[#FDFCFB]"><th className="text-left px-6 py-4 text-sm font-medium text-[#5C6B61]">Date</th><th className="text-left px-6 py-4 text-sm font-medium text-[#5C6B61]">Job</th><th className="text-right px-6 py-4 text-sm font-medium text-[#5C6B61]">Amount</th><th className="text-left px-6 py-4 text-sm font-medium text-[#5C6B61]">Notes</th><th className="text-right px-6 py-4 text-sm font-medium text-[#5C6B61]">Actions</th></tr></thead><tbody><SkeletonRow /><SkeletonRow /><SkeletonRow /></tbody></table>
-        </div>
+      <div className="space-y-6" data-testid="payments-page">
+        <PageHero
+          eyebrow="Cash In"
+          title="Payments"
+          description="Record incoming money and keep statements ready for export."
+        />
+        <PaymentsSkeletonPanel />
       </div>
     );
   }
-  
+
   return (
-    <div data-testid="payments-page">
-      <div className="mb-8">
-        <h1 className="text-4xl font-semibold tracking-tight text-[#344E41] mb-2" style={{ fontFamily: 'Outfit' }}>Payments</h1>
-        <p className="text-base leading-relaxed text-[#5C6B61]">Total received: <strong className="text-[#3A5A40]">${totalReceived.toFixed(2)}</strong></p>
-      </div>
-      
-      <div className="flex items-center justify-end gap-3 mb-8">
-        <Button onClick={handleDownloadStatement} disabled={generatingStatement} variant="outline" data-testid="download-statement-button" className="border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg text-sm flex items-center gap-2">
-          {generatingStatement ? (<><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#5C6B61]" />Generating...</>) : (<><Download size={16} /> Download Statement</>)}
-        </Button>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="add-payment-button" className="bg-[#344E41] hover:bg-[#2B3A28] text-white flex items-center gap-2 transition-all duration-200 rounded-lg text-sm" onClick={resetForms}><Plus size={18} /> Add Payment</Button>
-          </DialogTrigger>
-          <DialogContent className="bg-white border border-[#EAE6DF] rounded-xl max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-medium text-[#344E41]" style={{ fontFamily: 'Outfit' }}>Record Payment</DialogTitle>
-            </DialogHeader>
-            <Tabs value={entryMode} onValueChange={setEntryMode} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4"><TabsTrigger value="single">Single Payment</TabsTrigger><TabsTrigger value="monthly">Monthly Payment</TabsTrigger></TabsList>
-              <TabsContent value="single">
-                <form onSubmit={handleSubmit} className="space-y-4" data-testid="payment-form">
-                  <div>
-                    <Label htmlFor="single_job_id" className="text-[#5C6B61] font-medium">Job (Optional)</Label>
-                    <Select value={singleForm.job_id} onValueChange={(value) => setSingleForm({ ...singleForm, job_id: value })}>
-                      <SelectTrigger id="single_job_id" data-testid="payment-job-select" className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg"><SelectValue placeholder="Select a job (optional)" /></SelectTrigger>
-                      <SelectContent className="bg-white border border-[#EAE6DF] rounded-xl">{jobs.map((job) => (<SelectItem key={job.job_id} value={job.job_id}>{job.job_name}</SelectItem>))}</SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="single_amount" className="text-[#5C6B61] font-medium">Amount ($)</Label>
-                    <Input id="single_amount" data-testid="payment-amount-input" type="number" step="0.01" value={singleForm.amount} onChange={(e) => setSingleForm({ ...singleForm, amount: e.target.value })} required className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg" placeholder="500.00" />
-                  </div>
-                  <div>
-                    <Label htmlFor="single_date" className="text-[#5C6B61] font-medium">Date</Label>
-                    <Input id="single_date" data-testid="payment-date-input" type="date" value={singleForm.date} onChange={(e) => setSingleForm({ ...singleForm, date: e.target.value })} required className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg" />
-                  </div>
-                  <div>
-                    <Label htmlFor="single_notes" className="text-[#5C6B61] font-medium">Notes (Optional)</Label>
-                    <Textarea id="single_notes" data-testid="payment-notes-input" value={singleForm.notes} onChange={(e) => setSingleForm({ ...singleForm, notes: e.target.value })} className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg" placeholder="Any additional notes..." rows={3} />
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="flex-1 border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg text-sm" data-testid="cancel-payment-button">Cancel</Button>
-                    <Button type="submit" className="flex-1 bg-[#344E41] hover:bg-[#2B3A28] text-white rounded-lg text-sm" data-testid="submit-payment-button">Record Payment</Button>
-                  </div>
-                </form>
-              </TabsContent>
-              <TabsContent value="monthly">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <Label htmlFor="monthly_job_id" className="text-[#5C6B61] font-medium">Job</Label>
-                    <Select value={monthlyPaymentForm.job_id} onValueChange={(value) => setMonthlyPaymentForm({ ...monthlyPaymentForm, job_id: value })} required>
-                      <SelectTrigger id="monthly_job_id" className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg"><SelectValue placeholder="Select a job" /></SelectTrigger>
-                      <SelectContent className="bg-white border border-[#EAE6DF] rounded-xl">{jobs.map((job) => (<SelectItem key={job.job_id} value={job.job_id}>{job.job_name} - ${job.hourly_rate.toFixed(2)}/hr</SelectItem>))}</SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="payment_month" className="text-[#5C6B61] font-medium">Month</Label>
-                    <Input id="payment_month" type="month" value={monthlyPaymentForm.month} onChange={(e) => setMonthlyPaymentForm({ ...monthlyPaymentForm, month: e.target.value })} required className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg" />
-                  </div>
-                  {monthlyPaymentForm.calculated_earnings > 0 && (
-                    <div className="bg-[#F0EDE8] rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium text-[#344E41]">Hours logged: <span className="text-[#5C6B61]">{monthlyPaymentForm.hours_in_month} hours</span></p>
-                        <p className="text-sm font-medium text-[#344E41]">Expected earnings: <span className="text-[#3A5A40]">${monthlyPaymentForm.calculated_earnings.toFixed(2)}</span></p>
+    <div className="space-y-6" data-testid="payments-page">
+      <PageHero
+        eyebrow="Cash In"
+        title="Payments"
+        description="Track what has landed, tie it to the right client, and keep your statement history clean."
+        actions={
+          <>
+            <span className="status-chip status-chip-positive">{formatCurrency(totalReceived)} received</span>
+            <span className="status-chip status-chip-neutral">{formatInteger(payments.length)} payments logged</span>
+          </>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <MetricPanel
+            icon={Wallet}
+            label="Total received"
+            value={formatCurrency(totalReceived)}
+            detail="All recorded incoming payments across your workspace."
+          />
+          <MetricPanel
+            icon={ReceiptText}
+            label="Assigned payments"
+            value={formatInteger(assignedPayments)}
+            detail="Payments attached directly to a client job."
+            tone="fresh"
+          />
+          <MetricPanel
+            icon={CreditCard}
+            label="Statement months"
+            value={formatInteger(sortedMonths.length)}
+            detail="Monthly groups ready to review or export."
+            tone="warm"
+          />
+        </div>
+      </PageHero>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="app-panel rounded-[26px] px-4 py-3 text-sm leading-6 text-[#5a6d61]">
+          Record one-off transfers or a month-end payment against the hours already logged for a client.
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={handleDownloadStatement}
+            disabled={generatingStatement}
+            variant="outline"
+            data-testid="download-statement-button"
+          >
+            {generatingStatement ? (
+              <>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#355247]/30 border-t-[#355247]" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download size={16} />
+                Download Statement
+              </>
+            )}
+          </Button>
+
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="add-payment-button" onClick={resetForms}>
+                <Plus size={18} />
+                Add Payment
+              </Button>
+            </DialogTrigger>
+
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle className="text-2xl text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+                  Record payment
+                </DialogTitle>
+                <DialogDescription>
+                  Log a single transfer or reconcile a month-end payment against recorded hours.
+                </DialogDescription>
+              </DialogHeader>
+
+              <Tabs value={entryMode} onValueChange={setEntryMode} className="w-full">
+                <TabsList className="mb-5 grid w-full grid-cols-2">
+                  <TabsTrigger value="single">Single Payment</TabsTrigger>
+                  <TabsTrigger value="monthly">Monthly Payment</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="single">
+                  <form onSubmit={handleSubmit} className="space-y-5" data-testid="payment-form">
+                    <div className="app-panel rounded-[28px] p-4 space-y-4">
+                      <div>
+                        <Label htmlFor="single_job_id" className="text-sm font-semibold text-[#4c6154]">
+                          Job
+                        </Label>
+                        <Select
+                          value={singleForm.job_id}
+                          onValueChange={(value) => setSingleForm({ ...singleForm, job_id: value })}
+                        >
+                          <SelectTrigger id="single_job_id" data-testid="payment-job-select" className="mt-2">
+                            <SelectValue placeholder="General payment or select a job" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {jobs.map((job) => (
+                              <SelectItem key={job.job_id} value={job.job_id}>
+                                {job.job_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label htmlFor="single_amount" className="text-sm font-semibold text-[#4c6154]">
+                            Amount
+                          </Label>
+                          <Input
+                            id="single_amount"
+                            data-testid="payment-amount-input"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={singleForm.amount}
+                            onChange={(e) => setSingleForm({ ...singleForm, amount: e.target.value })}
+                            required
+                            className="mt-2"
+                            placeholder="500.00"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="single_date" className="text-sm font-semibold text-[#4c6154]">
+                            Date
+                          </Label>
+                          <Input
+                            id="single_date"
+                            data-testid="payment-date-input"
+                            type="date"
+                            value={singleForm.date}
+                            onChange={(e) => setSingleForm({ ...singleForm, date: e.target.value })}
+                            required
+                            className="mt-2"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="single_notes" className="text-sm font-semibold text-[#4c6154]">
+                          Notes
+                        </Label>
+                        <Textarea
+                          id="single_notes"
+                          data-testid="payment-notes-input"
+                          value={singleForm.notes}
+                          onChange={(e) => setSingleForm({ ...singleForm, notes: e.target.value })}
+                          className="mt-2"
+                          placeholder="Any context you want to keep with this transfer."
+                          rows={3}
+                        />
                       </div>
                     </div>
-                  )}
-                  <div>
-                    <Label htmlFor="amount_received" className="text-[#5C6B61] font-medium">Amount Received ($)</Label>
-                    <Input id="amount_received" type="number" step="0.01" value={monthlyPaymentForm.amount_received} onChange={(e) => setMonthlyPaymentForm({ ...monthlyPaymentForm, amount_received: e.target.value })} required className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg" placeholder="2000.00" />
-                    {monthlyPaymentForm.amount_received && monthlyPaymentForm.calculated_earnings > 0 && (
-                      <p className={`text-sm mt-1.5 font-medium ${parseFloat(monthlyPaymentForm.amount_received) < monthlyPaymentForm.calculated_earnings ? 'text-[#E07A5F]' : 'text-[#3A5A40]'}`}>
-                        {parseFloat(monthlyPaymentForm.amount_received) < monthlyPaymentForm.calculated_earnings 
-                          ? `Short by $${(monthlyPaymentForm.calculated_earnings - parseFloat(monthlyPaymentForm.amount_received)).toFixed(2)}`
-                          : parseFloat(monthlyPaymentForm.amount_received) > monthlyPaymentForm.calculated_earnings 
-                            ? `Over by $${(parseFloat(monthlyPaymentForm.amount_received) - monthlyPaymentForm.calculated_earnings).toFixed(2)}`
-                            : 'Matches ✓'}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="flex-1 border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg text-sm">Cancel</Button>
-                    <Button type="submit" className="flex-1 bg-[#344E41] hover:bg-[#2B3A28] text-white rounded-lg text-sm">Record Payment</Button>
-                  </div>
-                </form>
-              </TabsContent>
-            </Tabs>
-          </DialogContent>
-        </Dialog>
+
+                    <DialogFooter className="flex gap-3 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setDialogOpen(false)}
+                        className="flex-1"
+                        data-testid="cancel-payment-button"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        className="flex-1"
+                        data-testid="submit-payment-button"
+                      >
+                        Record Payment
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </TabsContent>
+
+                <TabsContent value="monthly">
+                  <form onSubmit={handleSubmit} className="space-y-5">
+                    <div className="app-panel rounded-[28px] p-4 space-y-4">
+                      <div>
+                        <Label htmlFor="monthly_job_id" className="text-sm font-semibold text-[#4c6154]">
+                          Job
+                        </Label>
+                        <Select
+                          value={monthlyPaymentForm.job_id}
+                          onValueChange={(value) =>
+                            setMonthlyPaymentForm({ ...monthlyPaymentForm, job_id: value })
+                          }
+                          required
+                        >
+                          <SelectTrigger id="monthly_job_id" className="mt-2">
+                            <SelectValue placeholder="Select a job" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {jobs.map((job) => (
+                              <SelectItem key={job.job_id} value={job.job_id}>
+                                {job.job_name} - {formatCurrency(job.hourly_rate)}/hr
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label htmlFor="payment_month" className="text-sm font-semibold text-[#4c6154]">
+                            Month
+                          </Label>
+                          <Input
+                            id="payment_month"
+                            type="month"
+                            value={monthlyPaymentForm.month}
+                            onChange={(e) =>
+                              setMonthlyPaymentForm({ ...monthlyPaymentForm, month: e.target.value })
+                            }
+                            required
+                            className="mt-2"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="amount_received" className="text-sm font-semibold text-[#4c6154]">
+                            Amount received
+                          </Label>
+                          <Input
+                            id="amount_received"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={monthlyPaymentForm.amount_received}
+                            onChange={(e) =>
+                              setMonthlyPaymentForm({
+                                ...monthlyPaymentForm,
+                                amount_received: e.target.value,
+                              })
+                            }
+                            required
+                            className="mt-2"
+                            placeholder="2000.00"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {monthlyPaymentForm.job_id ? (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <MetricPanel
+                          icon={ReceiptText}
+                          label="Logged hours"
+                          value={formatHours(monthlyHours)}
+                          detail={
+                            selectedMonthlyJob
+                              ? `${selectedMonthlyJob.job_name} in ${formatMonthLabel(monthlyPaymentForm.month).toLowerCase()}`
+                              : 'Hours tied to the selected job and month.'
+                          }
+                        />
+                        <MetricPanel
+                          icon={Wallet}
+                          label="Expected earnings"
+                          value={formatCurrency(monthlyEarnings)}
+                          detail={
+                            monthlyPaymentForm.amount_received
+                              ? monthlyDifference === 0
+                                ? 'Payment matches the logged earnings exactly.'
+                                : monthlyDifference > 0
+                                  ? `Over by ${formatCurrency(monthlyDifference)}`
+                                  : `Short by ${formatCurrency(Math.abs(monthlyDifference))}`
+                              : 'Calculated from the hours already logged.'
+                          }
+                          tone={
+                            monthlyPaymentForm.amount_received
+                              ? monthlyDifference >= 0
+                                ? 'fresh'
+                                : 'warm'
+                              : 'default'
+                          }
+                        />
+                      </div>
+                    ) : null}
+
+                    <DialogFooter className="flex gap-3 pt-1">
+                      <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="flex-1">
+                        Cancel
+                      </Button>
+                      <Button type="submit" className="flex-1">
+                        Record Payment
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </TabsContent>
+              </Tabs>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
-      
+
       {payments.length === 0 ? (
-        <div className="bg-white border border-[#EAE6DF] rounded-xl shadow-sm" data-testid="empty-payments-state"><EmptyState onAddClick={() => setDialogOpen(true)} /></div>
+        <EmptyWorkspaceState
+          icon={CreditCard}
+          title="No payments recorded yet"
+          description="Record your first payment to keep balances accurate and statements ready when you need them."
+          testId="empty-payments-state"
+          action={
+            <Button
+              onClick={() => {
+                resetForms();
+                setDialogOpen(true);
+              }}
+            >
+              <Plus size={18} />
+              Record your first payment
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-6">
           {sortedMonths.map((month) => {
-            const monthPayments = groupedPayments[month].sort((a, b) => new Date(b.date) - new Date(a.date));
-            const monthTotal = monthPayments.reduce((sum, p) => sum + p.amount, 0);
-            const monthName = new Date(month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            const monthPayments = groupedPayments[month].sort(
+              (left, right) => new Date(right.date) - new Date(left.date)
+            );
+            const monthTotal = monthPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
             return (
-              <div key={month}>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-medium text-[#344E41]" style={{ fontFamily: 'Outfit' }}>{monthName}</h2>
-                  <span className="text-[#3A5A40] font-medium text-sm">${monthTotal.toFixed(2)}</span>
-                </div>
-                <div className="bg-white border border-[#EAE6DF] rounded-xl overflow-hidden shadow-sm" data-testid="payments-table">
+              <section key={month} className="app-panel-solid rounded-[32px] p-6 md:p-8" data-testid="payments-table">
+                <SectionHeading
+                  eyebrow="Payment History"
+                  title={formatMonthLabel(month)}
+                  description="A clean monthly ledger of what has already come in."
+                  meta={<div className="status-chip status-chip-neutral">{formatCompactCurrency(monthTotal)}</div>}
+                />
+
+                <div className="mt-6 space-y-3">
                   {monthPayments.map((payment, index) => (
-                    <div key={payment.payment_id} data-testid={`payment-row-${index}`} className="group flex items-center justify-between px-6 py-4 border-b border-[#EAE6DF] last:border-b-0 hover:bg-[#FDFCFB]/50 transition-colors">
-                      <div className="flex items-center gap-6 flex-1">
-                        <span className="text-sm text-[#5C6B61] w-24">{new Date(payment.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                        <span className="text-base text-[#344E41] font-medium">{payment.job_name || 'General'}</span>
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <span className="text-base text-[#3A5A40] font-medium">${payment.amount.toFixed(2)}</span>
-                        <span className="text-sm text-[#5C6B61] w-32 truncate">{payment.notes || '-'}</span>
-                        <button onClick={() => handleDeleteClick(payment)} data-testid={`delete-payment-${index}`} className="p-2 text-[#E07A5F] hover:bg-[#FEF6F4] rounded-lg opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
+                    <div
+                      key={payment.payment_id}
+                      data-testid={`payment-row-${index}`}
+                      className="app-panel rounded-[26px] px-4 py-4"
+                    >
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-start gap-4">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-[#173229]/8 text-[#173229]">
+                            <CreditCard size={18} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#607166]">
+                              {formatShortDate(payment.date)}
+                            </p>
+                            <h3 className="mt-2 text-xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+                              {payment.job_name || 'General payment'}
+                            </h3>
+                            <p className="mt-1 text-sm text-[#5a6d61]">
+                              {payment.notes || 'No note attached to this payment.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 md:gap-4">
+                          <div className="text-right">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607166]">
+                              Amount
+                            </p>
+                            <p className="mt-2 text-2xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+                              {formatCurrency(payment.amount)}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setPaymentToDelete(payment);
+                              setDeleteDialogOpen(true);
+                            }}
+                            data-testid={`delete-payment-${index}`}
+                            className="flex h-11 w-11 items-center justify-center rounded-full border border-[#efc4b4] bg-[#fff7f4] text-[#8a4d36] transition-all hover:-translate-y-0.5 hover:bg-[#fff1eb]"
+                            title="Delete payment"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
             );
           })}
         </div>
       )}
-      
+
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-white border border-[#EAE6DF] rounded-xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-xl font-medium text-[#344E41]" style={{ fontFamily: 'Outfit' }}>Delete Payment</DialogTitle>
-            <DialogDescription className="text-[#5C6B61]">Are you sure you want to delete this payment of <strong className="text-[#344E41]">${paymentToDelete?.amount?.toFixed(2)}</strong> from {paymentToDelete?.job_name || 'General'}? This action cannot be undone.</DialogDescription>
+            <DialogTitle className="text-2xl text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+              Delete payment
+            </DialogTitle>
+            <DialogDescription>
+              Remove the payment of <strong className="text-[#173229]">{formatCurrency(paymentToDelete?.amount)}</strong>{' '}
+              from {paymentToDelete?.job_name || 'General payment'}. This cannot be undone.
+            </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex gap-3 pt-4">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} className="flex-1 border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg text-sm">Cancel</Button>
-            <Button onClick={handleDeleteConfirm} className="flex-1 bg-[#E07A5F] hover:bg-[#C85A3F] text-white rounded-lg text-sm">Delete</Button>
+
+          <DialogFooter className="flex gap-3 pt-1">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button onClick={handleDeleteConfirm} variant="destructive" className="flex-1">
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -6,6 +6,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 const highlights = [
   {
@@ -29,7 +30,7 @@ export default function LoginPage() {
   const handleGoogleLogin = () => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     if (!clientId) {
-      alert('Google Client ID is not configured. Please set REACT_APP_GOOGLE_CLIENT_ID.');
+      toast.error('Google Client ID is not configured. Please set REACT_APP_GOOGLE_CLIENT_ID.');
       return;
     }
 

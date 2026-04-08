@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -18,21 +19,21 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] p-4">
-          <div className="text-center max-w-md">
-            <AlertCircle size={64} className="mx-auto text-[#E07A5F] mb-6" />
-            <h1 className="text-3xl font-semibold text-[#344E41] mb-4">
-              Oops! Something went wrong
-            </h1>
-            <p className="text-[#5C6B61] mb-8">
-              We're sorry for the inconvenience. Please try refreshing the page.
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-[#344E41] hover:bg-[#2B3A28] text-white px-8 py-3 font-medium transition-colors"
-            >
-              Refresh Page
-            </button>
+        <div className="min-h-screen px-4 py-6">
+          <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-2xl items-center justify-center">
+            <div className="app-panel-solid w-full max-w-xl rounded-[34px] p-10 text-center">
+              <AlertCircle size={64} className="mx-auto mb-6 text-[#c35f47]" />
+              <div className="page-eyebrow mx-auto">Runtime Error</div>
+              <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+                Oops! Something went wrong
+              </h1>
+              <p className="mt-3 text-base leading-7 text-[#5a6d61]">
+                We&apos;re sorry for the inconvenience. Please try refreshing the page.
+              </p>
+              <Button onClick={() => window.location.reload()} className="mt-8">
+                Refresh Page
+              </Button>
+            </div>
           </div>
         </div>
       );

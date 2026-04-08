@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -41,10 +42,18 @@ export default function ProtectedRoute({ children }) {
   // Loading state
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#344E41] mx-auto mb-4"></div>
-          <p className="text-[#5C6B61]" data-testid="checking-auth-text">Checking authentication...</p>
+      <div className="min-h-screen px-4 py-6">
+        <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-2xl items-center justify-center">
+          <div className="app-panel-solid w-full max-w-xl rounded-[34px] p-10 text-center">
+            <div className="page-eyebrow">Secure Access</div>
+            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+              Checking authentication
+            </h1>
+            <p className="mt-3 text-base leading-7 text-[#5a6d61]" data-testid="checking-auth-text">
+              Opening your workspace and confirming your session now.
+            </p>
+            <LoadingSpinner />
+          </div>
         </div>
       </div>
     );

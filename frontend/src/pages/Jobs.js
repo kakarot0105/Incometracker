@@ -1,51 +1,133 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Plus, Pencil, Trash2, Briefcase, ToggleRight, ToggleLeft } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import {
+  Briefcase,
+  Pencil,
+  Plus,
+  ToggleLeft,
+  ToggleRight,
+  Trash2,
+  Wallet,
+} from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  EmptyWorkspaceState,
+  MetricPanel,
+  PageHero,
+  SectionHeading,
+} from '@/components/ProductUI';
+import { formatCurrency, formatInteger } from '@/lib/formatters';
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-// EmptyState Component
-function EmptyState({ onAddClick }) {
+function SkeletonJobCard() {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="w-20 h-20 rounded-2xl bg-[#F0EDE8] flex items-center justify-center mb-6">
-        <Briefcase size={32} className="text-[#A3B18A]" />
+    <div className="app-panel-solid rounded-[30px] p-6">
+      <div className="flex items-start justify-between">
+        <div className="space-y-3">
+          <div className="h-4 w-24 rounded-full bg-[#ece5d8] animate-pulse" />
+          <div className="h-9 w-36 rounded-full bg-[#e5ded2] animate-pulse" />
+          <div className="h-3 w-28 rounded-full bg-[#f0e8db] animate-pulse" />
+        </div>
+        <div className="h-12 w-12 rounded-[16px] bg-[#ece5d8] animate-pulse" />
       </div>
-      <h3 className="text-xl font-medium text-[#344E41] mb-2" style={{ fontFamily: 'Outfit' }}>
-        No jobs yet
-      </h3>
-      <p className="text-base text-[#5C6B61] mb-6 text-center max-w-sm">
-        Add your first job to start tracking hours and earnings
-      </p>
-      <Button
-        onClick={onAddClick}
-        className="bg-[#344E41] hover:bg-[#2B3A28] text-white flex items-center gap-2 rounded-lg"
-      >
-        <Plus size={18} />
-        Add your first job
-      </Button>
+      <div className="mt-6 flex gap-2">
+        <div className="h-10 flex-1 rounded-full bg-[#efe7da] animate-pulse" />
+        <div className="h-10 w-10 rounded-full bg-[#efe7da] animate-pulse" />
+      </div>
     </div>
   );
 }
 
-// Skeleton Card Component
-function SkeletonJobCard() {
+function JobCard({
+  job,
+  index,
+  onEdit,
+  onToggle,
+  onDelete,
+  inactive = false,
+}) {
   return (
-    <div className="bg-white border border-[#EAE6DF] rounded-xl p-5 shadow-sm">
-      <div className="flex items-start justify-between mb-3">
-        <div className="space-y-2 flex-1">
-          <div className="h-5 w-32 bg-[#E8E5DF] rounded animate-pulse" />
-          <div className="h-4 w-20 bg-[#E8E5DF] rounded animate-pulse" />
+    <article
+      className="app-panel-solid rounded-[30px] p-5 md:p-6"
+      data-testid={inactive ? `inactive-job-row-${index}` : `job-row-${index}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <span className={`status-chip ${inactive ? 'status-chip-warm' : 'status-chip-positive'}`}>
+            {inactive ? 'Inactive' : 'Active'}
+          </span>
+          <h3
+            className={`mt-4 text-2xl font-semibold tracking-tight ${inactive ? 'text-[#395145]' : 'text-[#173229]'}`}
+            style={{ fontFamily: 'Outfit' }}
+          >
+            {job.job_name}
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-[#5a6d61]">
+            {inactive
+              ? 'Paused for now, but kept here so the rate history stays intact.'
+              : 'Available for hours, invoices, and payment tracking.'}
+          </p>
         </div>
-        <div className="h-8 w-8 bg-[#E8E5DF] rounded-full animate-pulse" />
+
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-[16px] ${
+            inactive ? 'bg-[#f3c5b7]/40 text-[#8a4d36]' : 'bg-[#173229]/8 text-[#173229]'
+          }`}
+        >
+          <Briefcase size={20} />
+        </div>
       </div>
-      <div className="h-6 w-24 bg-[#E8E5DF] rounded animate-pulse" />
-    </div>
+
+      <div className="mt-6 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607166]">
+            Hourly rate
+          </p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+            {formatCurrency(job.hourly_rate)}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onEdit(job)}
+            data-testid={inactive ? undefined : `edit-job-${index}`}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-border/80 bg-white/80 text-[#355247] transition-all hover:-translate-y-0.5 hover:bg-white"
+            title="Edit job"
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            onClick={() => onToggle(job)}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-border/80 bg-white/80 text-[#355247] transition-all hover:-translate-y-0.5 hover:bg-white"
+            title={inactive ? 'Activate job' : 'Deactivate job'}
+          >
+            {inactive ? <ToggleLeft size={18} /> : <ToggleRight size={18} />}
+          </button>
+          <button
+            onClick={() => onDelete(job)}
+            data-testid={inactive ? undefined : `delete-job-${index}`}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-[#efc4b4] bg-[#fff7f4] text-[#8a4d36] transition-all hover:-translate-y-0.5 hover:bg-[#fff1eb]"
+            title="Delete job"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -57,15 +139,15 @@ export default function Jobs() {
   const [formData, setFormData] = useState({ job_name: '', hourly_rate: '' });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
-  
+
   useEffect(() => {
     fetchJobs();
   }, []);
-  
+
   const fetchJobs = async () => {
     try {
       const response = await axios.get(`${BACKEND_URL}/api/jobs`, {
-        withCredentials: true
+        withCredentials: true,
       });
       setJobs(response.data);
     } catch (error) {
@@ -75,63 +157,79 @@ export default function Jobs() {
       setLoading(false);
     }
   };
-  
+
+  const resetForm = () => {
+    setFormData({ job_name: '', hourly_rate: '' });
+    setEditingJob(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
+      const payload = {
+        job_name: formData.job_name,
+        hourly_rate: parseFloat(formData.hourly_rate),
+      };
+
       if (editingJob) {
-        await axios.put(
-          `${BACKEND_URL}/api/jobs/${editingJob.job_id}`,
-          {
-            job_name: formData.job_name,
-            hourly_rate: parseFloat(formData.hourly_rate)
-          },
-          { withCredentials: true }
-        );
+        await axios.put(`${BACKEND_URL}/api/jobs/${editingJob.job_id}`, payload, {
+          withCredentials: true,
+        });
         toast.success('Job updated successfully');
       } else {
-        await axios.post(
-          `${BACKEND_URL}/api/jobs`,
-          {
-            job_name: formData.job_name,
-            hourly_rate: parseFloat(formData.hourly_rate)
-          },
-          { withCredentials: true }
-        );
+        await axios.post(`${BACKEND_URL}/api/jobs`, payload, {
+          withCredentials: true,
+        });
         toast.success('Job created successfully');
       }
-      
+
       setDialogOpen(false);
-      setFormData({ job_name: '', hourly_rate: '' });
-      setEditingJob(null);
+      resetForm();
       fetchJobs();
     } catch (error) {
       console.error('Failed to save job:', error);
       toast.error('Failed to save job');
     }
   };
-  
+
   const handleEdit = (job) => {
     setEditingJob(job);
     setFormData({
       job_name: job.job_name,
-      hourly_rate: job.hourly_rate.toString()
+      hourly_rate: job.hourly_rate.toString(),
     });
     setDialogOpen(true);
   };
-  
-  const handleDeleteClick = (job) => {
-    setJobToDelete(job);
-    setDeleteDialogOpen(true);
+
+  const handleToggleActive = async (job) => {
+    try {
+      await axios.put(
+        `${BACKEND_URL}/api/jobs/${job.job_id}`,
+        {
+          job_name: job.job_name,
+          hourly_rate: job.hourly_rate,
+          is_active: !job.is_active,
+        },
+        { withCredentials: true }
+      );
+
+      toast.success(`Job ${job.is_active ? 'deactivated' : 'activated'} successfully`);
+      fetchJobs();
+    } catch (error) {
+      console.error('Failed to toggle job status:', error);
+      toast.error('Failed to update job status');
+    }
   };
-  
+
   const handleDeleteConfirm = async () => {
-    if (!jobToDelete) return;
-    
+    if (!jobToDelete) {
+      return;
+    }
+
     try {
       await axios.delete(`${BACKEND_URL}/api/jobs/${jobToDelete.job_id}`, {
-        withCredentials: true
+        withCredentials: true,
       });
       toast.success('Job deleted successfully');
       fetchJobs();
@@ -143,52 +241,24 @@ export default function Jobs() {
       setJobToDelete(null);
     }
   };
-  
-  const handleToggleActive = async (job) => {
-    try {
-      await axios.put(
-        `${BACKEND_URL}/api/jobs/${job.job_id}`,
-        {
-          job_name: job.job_name,
-          hourly_rate: job.hourly_rate,
-          is_active: !job.is_active
-        },
-        { withCredentials: true }
-      );
-      toast.success(`Job ${job.is_active ? 'deactivated' : 'activated'} successfully`);
-      fetchJobs();
-    } catch (error) {
-      console.error('Failed to toggle job status:', error);
-      toast.error('Failed to update job status');
-    }
-  };
-  
-  const handleDialogClose = () => {
-    setDialogOpen(false);
-    setEditingJob(null);
-    setFormData({ job_name: '', hourly_rate: '' });
-  };
-  
-  const activeJobs = jobs.filter(job => job.is_active);
-  const inactiveJobs = jobs.filter(job => !job.is_active);
-  
+
+  const activeJobs = jobs.filter((job) => job.is_active);
+  const inactiveJobs = jobs.filter((job) => !job.is_active);
+  const averageRate = activeJobs.length
+    ? activeJobs.reduce((sum, job) => sum + job.hourly_rate, 0) / activeJobs.length
+    : jobs.length
+      ? jobs.reduce((sum, job) => sum + job.hourly_rate, 0) / jobs.length
+      : 0;
+
   if (loading) {
     return (
-      <div data-testid="jobs-page">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 
-              className="text-4xl font-semibold tracking-tight text-[#344E41] mb-2" 
-              style={{ fontFamily: 'Outfit' }}
-            >
-              Jobs
-            </h1>
-            <p className="text-base leading-relaxed text-[#5C6B61]">
-              Manage your jobs and hourly rates
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="space-y-6" data-testid="jobs-page">
+        <PageHero
+          eyebrow="Client Setup"
+          title="Jobs"
+          description="Keep each client engagement tidy, active, and ready for tracking."
+        />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <SkeletonJobCard />
           <SkeletonJobCard />
           <SkeletonJobCard />
@@ -196,237 +266,220 @@ export default function Jobs() {
       </div>
     );
   }
-  
+
   return (
-    <div data-testid="jobs-page">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 
-            className="text-4xl font-semibold tracking-tight text-[#344E41] mb-2" 
-            style={{ fontFamily: 'Outfit' }}
-          >
-            Jobs
-          </h1>
-          <p className="text-base leading-relaxed text-[#5C6B61]">
-            Manage your jobs and hourly rates
-          </p>
+    <div className="space-y-6" data-testid="jobs-page">
+      <PageHero
+        eyebrow="Client Setup"
+        title="Jobs"
+        description="Manage the engagements that feed your hours, payments, and invoice history."
+        actions={
+          <>
+            <span className="status-chip status-chip-positive">
+              {formatInteger(activeJobs.length)} active
+            </span>
+            <span className="status-chip status-chip-neutral">
+              {formatCurrency(averageRate)} average rate
+            </span>
+          </>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <MetricPanel
+            icon={Briefcase}
+            label="All jobs"
+            value={formatInteger(jobs.length)}
+            detail="Every engagement saved in your workspace."
+          />
+          <MetricPanel
+            icon={Wallet}
+            label="Active jobs"
+            value={formatInteger(activeJobs.length)}
+            detail="Ready for hours, invoices, and payment updates."
+            tone="fresh"
+          />
+          <MetricPanel
+            icon={ToggleLeft}
+            label="Inactive jobs"
+            value={formatInteger(inactiveJobs.length)}
+            detail="Paused but still preserved for historical records."
+            tone="warm"
+          />
         </div>
-        
+      </PageHero>
+
+      <div className="flex justify-end">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button 
+            <Button
               data-testid="add-job-button"
-              className="bg-[#344E41] hover:bg-[#2B3A28] text-white flex items-center gap-2 transition-all duration-200 rounded-lg text-sm"
-              onClick={() => {
-                setEditingJob(null);
-                setFormData({ job_name: '', hourly_rate: '' });
-              }}
+              onClick={() => resetForm()}
             >
               <Plus size={18} />
               Add Job
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-white border border-[#EAE6DF] rounded-xl">
+          <DialogContent className="max-w-xl">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-medium text-[#344E41]" style={{ fontFamily: 'Outfit' }}>
-                {editingJob ? 'Edit Job' : 'Add New Job'}
+              <DialogTitle className="text-2xl text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+                {editingJob ? 'Edit job' : 'Add new job'}
               </DialogTitle>
+              <DialogDescription>
+                Save the client name and hourly rate so the rest of your workspace can stay in sync.
+              </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4" data-testid="job-form">
-              <div>
-                <Label htmlFor="job_name" className="text-[#5C6B61] font-medium">Job Name</Label>
-                <Input
-                  id="job_name"
-                  data-testid="job-name-input"
-                  value={formData.job_name}
-                  onChange={(e) => setFormData({ ...formData, job_name: e.target.value })}
-                  required
-                  className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg"
-                  placeholder="e.g., Web Development"
-                />
+
+            <form onSubmit={handleSubmit} className="space-y-5" data-testid="job-form">
+              <div className="app-panel rounded-[28px] p-4 space-y-4">
+                <div>
+                  <Label htmlFor="job_name" className="text-sm font-semibold text-[#4c6154]">
+                    Job name
+                  </Label>
+                  <Input
+                    id="job_name"
+                    data-testid="job-name-input"
+                    value={formData.job_name}
+                    onChange={(e) => setFormData({ ...formData, job_name: e.target.value })}
+                    required
+                    className="mt-2"
+                    placeholder="e.g., Web Development"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="hourly_rate" className="text-sm font-semibold text-[#4c6154]">
+                    Hourly rate
+                  </Label>
+                  <Input
+                    id="hourly_rate"
+                    data-testid="hourly-rate-input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.hourly_rate}
+                    onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
+                    required
+                    className="mt-2"
+                    placeholder="85.00"
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="hourly_rate" className="text-[#5C6B61] font-medium">Hourly Rate ($)</Label>
-                <Input
-                  id="hourly_rate"
-                  data-testid="hourly-rate-input"
-                  type="number"
-                  step="0.01"
-                  value={formData.hourly_rate}
-                  onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
-                  required
-                  className="mt-1 border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] rounded-lg"
-                  placeholder="25.00"
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
+
+              <DialogFooter className="flex gap-3 pt-1">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleDialogClose}
-                  className="flex-1 border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg text-sm"
+                  onClick={() => {
+                    setDialogOpen(false);
+                    resetForm();
+                  }}
+                  className="flex-1"
                   data-testid="cancel-job-button"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  className="flex-1 bg-[#344E41] hover:bg-[#2B3A28] text-white rounded-lg text-sm"
+                  className="flex-1"
                   data-testid="submit-job-button"
                 >
-                  {editingJob ? 'Update' : 'Create'}
+                  {editingJob ? 'Update job' : 'Create job'}
                 </Button>
-              </div>
+              </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
       </div>
-      
+
       {jobs.length === 0 ? (
-        <div className="bg-white border border-[#EAE6DF] rounded-xl shadow-sm" data-testid="empty-jobs-state">
-          <EmptyState onAddClick={() => setDialogOpen(true)} />
-        </div>
+        <EmptyWorkspaceState
+          icon={Briefcase}
+          title="No jobs yet"
+          description="Add your first client engagement to start tracking hours, payments, and invoices in one place."
+          testId="empty-jobs-state"
+          action={
+            <Button
+              onClick={() => {
+                resetForm();
+                setDialogOpen(true);
+              }}
+            >
+              <Plus size={18} />
+              Add your first job
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-8">
-          {/* Active Jobs Section */}
           {activeJobs.length > 0 && (
-            <div>
-              <h2 className="text-xs font-medium text-[#5C6B61] uppercase tracking-wider mb-4">
-                Active ({activeJobs.length})
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <section className="app-panel-solid rounded-[32px] p-6 md:p-8">
+              <SectionHeading
+                eyebrow="Active"
+                title={`${formatInteger(activeJobs.length)} active job${activeJobs.length !== 1 ? 's' : ''}`}
+                description="These jobs are live and ready to receive new hours, invoices, and payments."
+              />
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {activeJobs.map((job, index) => (
-                  <div
+                  <JobCard
                     key={job.job_id}
-                    data-testid={`job-row-${index}`}
-                    className="group bg-white border border-[#EAE6DF] rounded-xl p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-[2px]"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-[#344E41] truncate" style={{ fontFamily: 'Outfit' }}>
-                          {job.job_name}
-                        </h3>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#3A5A40]/10 text-[#3A5A40] mt-2">
-                          Active
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleEdit(job)}
-                          data-testid={`edit-job-${index}`}
-                          className="p-2 text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg transition-colors"
-                          title="Edit job"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(job)}
-                          className="p-2 text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg transition-colors"
-                          title="Deactivate job"
-                        >
-                          <ToggleRight size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(job)}
-                          data-testid={`delete-job-${index}`}
-                          className="p-2 text-[#E07A5F] hover:bg-[#FEF6F4] rounded-lg transition-colors"
-                          title="Delete job"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-2xl font-semibold text-[#344E41]" style={{ fontFamily: 'Outfit' }}>
-                      ${job.hourly_rate.toFixed(2)}
-                      <span className="text-sm font-normal text-[#5C6B61] ml-1">/hr</span>
-                    </p>
-                  </div>
+                    job={job}
+                    index={index}
+                    onEdit={handleEdit}
+                    onToggle={handleToggleActive}
+                    onDelete={(selectedJob) => {
+                      setJobToDelete(selectedJob);
+                      setDeleteDialogOpen(true);
+                    }}
+                  />
                 ))}
               </div>
-            </div>
+            </section>
           )}
-          
-          {/* Inactive Jobs Section */}
+
           {inactiveJobs.length > 0 && (
-            <div>
-              <h2 className="text-xs font-medium text-[#5C6B61] uppercase tracking-wider mb-4">
-                Inactive ({inactiveJobs.length})
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <section className="app-panel-solid rounded-[32px] p-6 md:p-8">
+              <SectionHeading
+                eyebrow="Archived"
+                title={`${formatInteger(inactiveJobs.length)} inactive job${inactiveJobs.length !== 1 ? 's' : ''}`}
+                description="Paused engagements remain available so your history and rate references stay intact."
+              />
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {inactiveJobs.map((job, index) => (
-                  <div
+                  <JobCard
                     key={job.job_id}
-                    data-testid={`inactive-job-row-${index}`}
-                    className="group bg-white border border-[#EAE6DF] rounded-xl p-5 shadow-sm opacity-75 transition-all duration-200 hover:shadow-md hover:opacity-100"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-[#5C6B61] truncate" style={{ fontFamily: 'Outfit' }}>
-                          {job.job_name}
-                        </h3>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#E07A5F]/10 text-[#E07A5F] mt-2">
-                          Inactive
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleEdit(job)}
-                          className="p-2 text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg transition-colors"
-                          title="Edit job"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(job)}
-                          className="p-2 text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg transition-colors"
-                          title="Activate job"
-                        >
-                          <ToggleLeft size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(job)}
-                          className="p-2 text-[#E07A5F] hover:bg-[#FEF6F4] rounded-lg transition-colors"
-                          title="Delete job"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-2xl font-semibold text-[#5C6B61]" style={{ fontFamily: 'Outfit' }}>
-                      ${job.hourly_rate.toFixed(2)}
-                      <span className="text-sm font-normal text-[#8A9E90] ml-1">/hr</span>
-                    </p>
-                  </div>
+                    job={job}
+                    index={index}
+                    inactive
+                    onEdit={handleEdit}
+                    onToggle={handleToggleActive}
+                    onDelete={(selectedJob) => {
+                      setJobToDelete(selectedJob);
+                      setDeleteDialogOpen(true);
+                    }}
+                  />
                 ))}
               </div>
-            </div>
+            </section>
           )}
         </div>
       )}
-      
-      {/* Delete Confirmation Dialog */}
+
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-white border border-[#EAE6DF] rounded-xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-xl font-medium text-[#344E41]" style={{ fontFamily: 'Outfit' }}>
-              Delete Job
+            <DialogTitle className="text-2xl text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+              Delete job
             </DialogTitle>
-            <DialogDescription className="text-[#5C6B61]">
-              Are you sure you want to delete <strong className="text-[#344E41]">{jobToDelete?.job_name}</strong>? This action cannot be undone.
+            <DialogDescription>
+              Remove <strong className="text-[#173229]">{jobToDelete?.job_name}</strong> permanently. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex gap-3 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-              className="flex-1 border-[#EAE6DF] text-[#5C6B61] hover:bg-[#F5F3EE] rounded-lg text-sm"
-            >
+
+          <DialogFooter className="flex gap-3 pt-1">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} className="flex-1">
               Cancel
             </Button>
-            <Button
-              onClick={handleDeleteConfirm}
-              className="flex-1 bg-[#E07A5F] hover:bg-[#C85A3F] text-white rounded-lg text-sm"
-            >
+            <Button onClick={handleDeleteConfirm} variant="destructive" className="flex-1">
               Delete
             </Button>
           </DialogFooter>

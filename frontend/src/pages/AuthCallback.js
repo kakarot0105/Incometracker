@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 
@@ -28,7 +30,7 @@ export default function AuthCallback() {
         // CSRF protection
         if (state !== storedState) {
           console.error('Invalid OAuth state');
-          alert('Invalid login attempt. Please try again.');
+          toast.error('Invalid login attempt. Please try again.');
           navigate('/login');
           return;
         }
@@ -49,7 +51,7 @@ export default function AuthCallback() {
         navigate('/', { state: { user }, replace: true });
       } catch (error) {
         console.error('Auth callback error:', error);
-        alert(`Login failed: ${error.response?.data?.detail || error.message}`);
+        toast.error(`Login failed: ${error.response?.data?.detail || error.message}`);
         navigate('/login');
       }
     };
@@ -58,10 +60,18 @@ export default function AuthCallback() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB]">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#344E41] mx-auto mb-4"></div>
-        <p className="text-[#5C6B61]" data-testid="auth-loading-text">Completing sign in...</p>
+    <div className="min-h-screen px-4 py-6">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-2xl items-center justify-center">
+        <div className="app-panel-solid w-full max-w-xl rounded-[34px] p-10 text-center">
+          <div className="page-eyebrow mx-auto">Secure Access</div>
+          <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
+            Completing sign in
+          </h1>
+          <p className="mt-3 text-base leading-7 text-[#5a6d61]" data-testid="auth-loading-text">
+            Finalizing your Google session and opening the workspace now.
+          </p>
+          <LoadingSpinner />
+        </div>
       </div>
     </div>
   );
