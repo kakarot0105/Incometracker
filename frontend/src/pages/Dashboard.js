@@ -127,15 +127,15 @@ export default function Dashboard() {
       const link = document.createElement('a');
       link.href = url;
 
-      let filename = 'timesheet.pdf';
+      let filename = 'balance_sheet.pdf';
       if (exportMode === 'month') {
         const monthName = new Date(`${selectedMonth}-01T12:00:00`).toLocaleDateString('en-US', {
           month: 'long',
           year: 'numeric',
         });
-        filename = `timesheet_${monthName.replace(' ', '_')}.pdf`;
+        filename = `balance_sheet_${monthName.replace(' ', '_')}.pdf`;
       } else {
-        filename = `timesheet_${startDate}_to_${endDate}.pdf`;
+        filename = `balance_sheet_${startDate}_to_${endDate}.pdf`;
       }
 
       link.setAttribute('download', filename);
@@ -144,7 +144,7 @@ export default function Dashboard() {
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success('Timesheet downloaded');
+      toast.success('Balance sheet downloaded');
     } catch (error) {
       console.error('Failed to download report:', error);
       if (error.response?.status === 404) {
@@ -251,7 +251,7 @@ export default function Dashboard() {
 
           <div className="w-full max-w-md rounded-[28px] border border-border/80 bg-white/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] backdrop-blur-xl">
             <div className="flex items-center justify-between mb-2">
-              <p className="page-eyebrow !bg-white/75 !mb-0">Export Timesheet</p>
+              <p className="page-eyebrow !bg-white/75 !mb-0">Export Balance Sheet</p>
               <div className="flex bg-white/50 backdrop-blur-md border border-black/5 rounded-full p-1 shadow-sm">
                 <button
                   onClick={() => setExportMode('month')}

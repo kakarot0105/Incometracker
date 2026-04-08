@@ -1008,7 +1008,7 @@ async def generate_monthly_spreadsheet(
         spaceAfter=20
     )
     
-    elements.append(Paragraph("TIMESHEET", title_style))
+    elements.append(Paragraph("BALANCE SHEET", title_style))
     elements.append(Paragraph(f"{user.name} | Period: {period_str}", subtitle_style))
     
     # Summary Box
@@ -1085,7 +1085,7 @@ async def generate_monthly_spreadsheet(
     pdf_data = buffer.getvalue()
     buffer.close()
     
-    filename = f"timesheet_{filename_part}.pdf"
+    filename = f"balance_sheet_{filename_part}.pdf"
     return StreamingResponse(
         BytesIO(pdf_data),
         media_type="application/pdf",
