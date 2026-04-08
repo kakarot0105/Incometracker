@@ -945,135 +945,147 @@ async def generate_earnings_statement(
 
 @api_router.get("/reports/monthly-spreadsheet")
 async def generate_monthly_spreadsheet(
-    month: str,
     request: Request,
+    month: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     session_token: Optional[str] = Cookie(None)
 ):
-    """Generate a simple spreadsheet-style PDF for a specific month"""
+    """Generate a spreadsheet-style PDF for a specific month or date range"""
     user = await get_current_user(request, session_token)
     
-    # Fetch hours logs for the month
+    if not month and not (start_date and end_date):
+        raise HTTPException(status_code=400, detail="Must provide month OR start_date and end_date")
+    
+    # Fetch hours logs and payments
     hours_logs = await db.hours_logs.find(
         {"user_id": user.user_id},
         {"_id": 0}
     ).sort("date", 1).to_list(10000)
     
-    # Filter for selected month
-    filtered_logs = [log for log in hours_logs if log['date'].startswith(month)]
+    payments = await db.payments.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).to_list(10000)
     
-    if not filtered_logs:
-        raise HTTPException(status_code=404, detail=f"No hours logged for {month}")
+    # Filter based on criteria
+    if month:
+        filtered_logs = [log for log in hours_logs if log['date'].startswith(month)]
+        filtered_payments = [p for p in payments if p['date'].startswith(month)]
+        month_date = datetime.strptime(month + '-01', '%Y-%m-%d')
+        period_str = month_date.strftime('%B %Y')
+        filename_part = month_date.strftime('%B_%Y')
+    else:
+        filtered_logs = [log for log in hours_logs if start_date <= log['date'] <= end_date]
+        filtered_payments = [p for p in payments if start_date <= p['date'] <= end_date]
+        period_str = f"{start_date} to {end_date}"
+        filename_part = f"{start_date}_to_{end_date}"
+    
+    if not filtered_logs and not filtered_payments:
+        raise HTTPException(status_code=404, detail=f"No activity found for {period_str}")
+    
+    # Calculate totals
+    total_hours = sum(log['hours_worked'] for log in filtered_logs)
+    total_earned = sum(log['calculated_pay'] for log in filtered_logs)
+    total_paid = sum(p['amount'] for p in filtered_payments)
+    balance = total_earned - total_paid
     
     # Create PDF
     buffer = BytesIO()
     doc = SimpleDocTemplate(
-        buffer,
-        pagesize=letter,
-        rightMargin=50,
-        leftMargin=50,
-        topMargin=50,
-        bottomMargin=50
+        buffer, pagesize=letter, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50
     )
     
     elements = []
     styles = getSampleStyleSheet()
     
-    # Title
     title_style = ParagraphStyle(
-        'Title',
-        parent=styles['Heading1'],
-        fontSize=18,
-        textColor=colors.HexColor('#344E41'),
-        spaceAfter=20,
-        fontName='Helvetica-Bold'
+        'Title', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#061b31'),
+        spaceAfter=5, fontName='Helvetica-Bold'
+    )
+    subtitle_style = ParagraphStyle(
+        'Subtitle', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor('#4A5568'),
+        spaceAfter=20
     )
     
-    month_date = datetime.strptime(month + '-01', '%Y-%m-%d')
-    month_name = month_date.strftime('%B %Y')
+    elements.append(Paragraph("TIMESHEET", title_style))
+    elements.append(Paragraph(f"{user.name} | Period: {period_str}", subtitle_style))
     
-    elements.append(Paragraph(f"TIMESHEET - {month_name}", title_style))
-    elements.append(Paragraph(f"{user.name}", styles['Normal']))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    # Simple spreadsheet table
-    table_data = [['Date', 'Job', 'Hours', 'Rate', 'Amount']]
-    
-    total_hours = 0
-    total_amount = 0
-    
-    for log in filtered_logs:
-        date_str = log['date']
-        if isinstance(date_str, str):
-            date_obj = datetime.fromisoformat(date_str)
-        else:
-            date_obj = date_str
-        
-        table_data.append([
-            date_obj.strftime('%m/%d/%Y'),
-            log['job_name'],
-            f"{log['hours_worked']:.1f}",
-            f"${log['hourly_rate']:.2f}",
-            f"${log['calculated_pay']:.2f}"
-        ])
-        
-        total_hours += log['hours_worked']
-        total_amount += log['calculated_pay']
-    
-    # Add total row
-    table_data.append(['', 'TOTAL', f"{total_hours:.1f}", '', f"${total_amount:.2f}"])
-    
-    # Create table with simple styling
-    table = Table(table_data, colWidths=[1.2*inch, 2.5*inch, 0.8*inch, 1*inch, 1.2*inch])
-    table.setStyle(TableStyle([
-        # Header row
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#344E41')),
+    # Summary Box
+    summary_data = [
+        ['Total Earned', 'Total Paid', 'Balance Owed'],
+        [f"${total_earned:,.2f}", f"${total_paid:,.2f}", f"${balance:,.2f}"]
+    ]
+    summary_table = Table(summary_data, colWidths=[2.2*inch, 2.2*inch, 2.2*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#061b31')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 11),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('TOPPADDING', (0, 0), (-1, 0), 12),
-        
-        # Data rows
-        ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -2), 10),
-        ('ALIGN', (2, 1), (2, -1), 'CENTER'),
-        ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
-        ('GRID', (0, 0), (-1, -2), 1, colors.HexColor('#EAE6DF')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#FDFCFB')]),
-        ('TOPPADDING', (0, 1), (-1, -2), 8),
-        ('BOTTOMPADDING', (0, 1), (-1, -2), 8),
-        
-        # Total row
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, -1), (-1, -1), 12),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F5F3EE')),
-        ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#344E41')),
-        ('TOPPADDING', (0, -1), (-1, -1), 12),
-        ('BOTTOMPADDING', (0, -1), (-1, -1), 12),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 1), (-1, 1), 14),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, 1), 16),
+        ('TOPPADDING', (0, 1), (-1, 1), 16),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#F8FAFC')),
+        ('TEXTCOLOR', (2, 1), (2, 1), colors.HexColor('#E53E3E') if balance > 0 else colors.HexColor('#38A169')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#E2E8F0')),
+        ('INNERGRID', (0, 0), (-1, -1), 1, colors.HexColor('#E2E8F0')),
     ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 0.4*inch))
     
-    elements.append(table)
+    # Hours Log Table
+    elements.append(Paragraph("Logged Hours", ParagraphStyle('H2', parent=styles['Heading2'], fontSize=14, textColor=colors.HexColor('#061b31'), spaceAfter=10)))
+    if filtered_logs:
+        table_data = [['Date', 'Job', 'Hours', 'Rate', 'Amount']]
+        
+        for log in filtered_logs:
+            date_obj = datetime.fromisoformat(log['date']) if isinstance(log['date'], str) else log['date']
+            table_data.append([
+                date_obj.strftime('%m/%d/%Y'),
+                log['job_name'],
+                f"{log['hours_worked']:.1f}",
+                f"${log['hourly_rate']:.2f}",
+                f"${log['calculated_pay']:.2f}"
+            ])
+            
+        table_data.append(['', 'TOTAL', f"{total_hours:.1f}", '', f"${total_earned:,.2f}"])
+        
+        table = Table(table_data, colWidths=[1.2*inch, 2.5*inch, 0.8*inch, 1*inch, 1.2*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#061b31')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('TOPPADDING', (0, 0), (-1, 0), 10),
+            ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -2), 10),
+            ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+            ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -2), 0.5, colors.HexColor('#E2E8F0')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('TOPPADDING', (0, 1), (-1, -2), 6),
+            ('BOTTOMPADDING', (0, 1), (-1, -2), 6),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, -1), (-1, -1), 11),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#EDF2F7')),
+            ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#061b31')),
+            ('TOPPADDING', (0, -1), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, -1), (-1, -1), 10),
+        ]))
+        elements.append(table)
+    else:
+        elements.append(Paragraph("No hours logged for this period.", styles['Normal']))
     
     # Build PDF
     doc.build(elements)
-    
     pdf_data = buffer.getvalue()
     buffer.close()
     
-    filename = f"timesheet_{month_name.replace(' ', '_')}.pdf"
-    return StreamingResponse(
-        BytesIO(pdf_data),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
-    
-    # Build PDF
-    doc.build(elements)
-    
-    pdf_data = buffer.getvalue()
-    buffer.close()
-    
-    filename = f"earnings_statement_{datetime.now().strftime('%Y%m%d')}.pdf"
+    filename = f"timesheet_{filename_part}.pdf"
     return StreamingResponse(
         BytesIO(pdf_data),
         media_type="application/pdf",

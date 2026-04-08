@@ -82,6 +82,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [exportMode, setExportMode] = useState('month'); // 'month' or 'range'
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
     fetchSummary();
@@ -101,10 +104,19 @@ export default function Dashboard() {
   };
 
   const handleDownloadMonthlyReport = async () => {
+    if (exportMode === 'range' && (!startDate || !endDate)) {
+      toast.error('Please select both start and end dates');
+      return;
+    }
+
     setDownloadingPdf(true);
     try {
+      const qs = exportMode === 'month'
+        ? `?month=${selectedMonth}`
+        : `?start_date=${startDate}&end_date=${endDate}`;
+
       const response = await axios.get(
-        `${BACKEND_URL}/api/reports/monthly-spreadsheet?month=${selectedMonth}`,
+        `${BACKEND_URL}/api/reports/monthly-spreadsheet${qs}`,
         {
           withCredentials: true,
           responseType: 'blob',
@@ -115,11 +127,16 @@ export default function Dashboard() {
       const link = document.createElement('a');
       link.href = url;
 
-      const monthName = new Date(`${selectedMonth}-01T12:00:00`).toLocaleDateString('en-US', {
-        month: 'long',
-        year: 'numeric',
-      });
-      const filename = `timesheet_${monthName.replace(' ', '_')}.pdf`;
+      let filename = 'timesheet.pdf';
+      if (exportMode === 'month') {
+        const monthName = new Date(`${selectedMonth}-01T12:00:00`).toLocaleDateString('en-US', {
+          month: 'long',
+          year: 'numeric',
+        });
+        filename = `timesheet_${monthName.replace(' ', '_')}.pdf`;
+      } else {
+        filename = `timesheet_${startDate}_to_${endDate}.pdf`;
+      }
 
       link.setAttribute('download', filename);
       document.body.appendChild(link);
@@ -127,7 +144,7 @@ export default function Dashboard() {
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success('Monthly report downloaded');
+      toast.success('Timesheet downloaded');
     } catch (error) {
       console.error('Failed to download report:', error);
       if (error.response?.status === 404) {
@@ -233,24 +250,48 @@ export default function Dashboard() {
           </div>
 
           <div className="w-full max-w-md rounded-[28px] border border-border/80 bg-white/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] backdrop-blur-xl">
-            <p className="page-eyebrow !bg-white/75">Monthly Export</p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <Label htmlFor="month_selector" className="text-sm font-semibold text-[#4c6154]">
-                  Month
-                </Label>
-                <Input
-                  id="month_selector"
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="mt-2"
-                />
+            <div className="flex items-center justify-between mb-2">
+              <p className="page-eyebrow !bg-white/75 !mb-0">Export Timesheet</p>
+              <div className="flex bg-white/50 backdrop-blur-md border border-black/5 rounded-full p-1 shadow-sm">
+                <button
+                  onClick={() => setExportMode('month')}
+                  className={cn("text-[11px] font-medium px-3 py-1 rounded-full transition-all duration-200", exportMode === 'month' ? "bg-[#061b31] text-white shadow-md" : "text-[#5a6d61] hover:text-[#061b31]")}
+                >By Month</button>
+                <button
+                  onClick={() => setExportMode('range')}
+                  className={cn("text-[11px] font-medium px-3 py-1 rounded-full transition-all duration-200", exportMode === 'range' ? "bg-[#061b31] text-white shadow-md" : "text-[#5a6d61] hover:text-[#061b31]")}
+                >Custom Range</button>
               </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+              {exportMode === 'month' ? (
+                <div className="flex-1">
+                  <Label htmlFor="month_selector" className="text-sm font-semibold text-[#4c6154]">Month</Label>
+                  <Input
+                    id="month_selector"
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 flex gap-2">
+                  <div className="flex-1">
+                    <Label className="text-xs font-semibold text-[#4c6154]">Start</Label>
+                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 h-9 text-sm" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs font-semibold text-[#4c6154]">End</Label>
+                    <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="mt-1 h-9 text-sm" />
+                  </div>
+                </div>
+              )}
 
               <Button
                 onClick={handleDownloadMonthlyReport}
-                disabled={downloadingPdf}
+                disabled={downloadingPdf || (exportMode === 'range' && (!startDate || !endDate))}
                 className="h-11 px-5 sm:w-auto"
               >
                 {downloadingPdf ? (
@@ -261,13 +302,13 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <Download size={16} />
-                    Export PDF
+                    Export
                   </>
                 )}
               </Button>
             </div>
-            <p className="mt-3 text-sm leading-6 text-[#5a6d61]">
-              Build a polished timesheet for {selectedMonthLabel.toLowerCase()} in one click.
+            <p className="mt-3 text-xs leading-5 text-[#5a6d61]">
+              Generate a polished PDF breaking down hours, payments, and balance owed.
             </p>
           </div>
         </div>
