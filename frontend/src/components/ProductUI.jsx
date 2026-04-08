@@ -50,10 +50,10 @@ export function MetricPanel({
       data-testid={testId}
     >
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607166]">{label}</p>
-          <p className="metric-value mt-4 text-[#173229]">{value}</p>
-          {detail ? <p className="mt-3 max-w-[18rem] text-sm leading-6 text-[#5a6d61]">{detail}</p> : null}
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607166] truncate">{label}</p>
+          <p className="metric-value mt-3 text-[#173229] truncate">{value}</p>
+          {detail ? <p className="mt-2 text-sm leading-6 text-[#5a6d61]">{detail}</p> : null}
         </div>
 
         {Icon ? (
