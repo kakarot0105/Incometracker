@@ -20,8 +20,10 @@ jobs:
         password: ${{ secrets.VPS_PASSWORD }}
         command_timeout: 15m
         script: |
+          set -e
           cd /root/Incometracker
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
           
           # Update backend
           cd backend
