@@ -1,36 +1,78 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
-import { DollarSign, Clock, Briefcase, TrendingUp, TrendingDown, Download } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import {
+  Briefcase,
+  Clock,
+  DollarSign,
+  Download,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-// Skeleton Card Component
-function SkeletonCard() {
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const hourFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+function formatCurrency(value = 0) {
+  return currencyFormatter.format(Number.isFinite(value) ? value : 0);
+}
+
+function formatHours(value = 0) {
+  return hourFormatter.format(Number.isFinite(value) ? value : 0);
+}
+
+function formatAxisCurrency(value) {
+  if (Math.abs(value) >= 1000) {
+    return `$${(value / 1000).toFixed(Math.abs(value) >= 10000 ? 0 : 1)}k`;
+  }
+  return `$${value}`;
+}
+
+function SkeletonCard({ className }) {
   return (
-    <div className="bg-white border border-[#EAE6DF] rounded-xl p-6 shadow-sm">
-      <div className="flex items-start justify-between mb-4">
-        <div className="w-10 h-10 rounded-full bg-[#E8E5DF] animate-pulse" />
+    <div className={cn('app-panel-solid overflow-hidden rounded-[28px] p-6', className)}>
+      <div className="mb-6 flex items-start justify-between">
+        <div className="h-10 w-10 rounded-[16px] bg-[#e8e1d6] animate-pulse" />
       </div>
-      <div className="space-y-2">
-        <div className="h-3 w-20 bg-[#E8E5DF] rounded animate-pulse" />
-        <div className="h-8 w-28 bg-[#E8E5DF] rounded animate-pulse" />
+      <div className="space-y-3">
+        <div className="h-3 w-28 rounded-full bg-[#e8e1d6] animate-pulse" />
+        <div className="h-10 w-44 rounded-full bg-[#e8e1d6] animate-pulse" />
+        <div className="h-3 w-36 rounded-full bg-[#efe7da] animate-pulse" />
       </div>
     </div>
   );
 }
 
-// Skeleton Chart Component
 function SkeletonChart() {
   return (
-    <div className="bg-white border border-[#EAE6DF] rounded-xl p-6">
-      <div className="h-6 w-32 bg-[#E8E5DF] rounded animate-pulse mb-6" />
-      <div className="h-[250px] bg-[#E8E5DF] rounded-xl animate-pulse" />
+    <div className="app-panel-solid rounded-[32px] p-6 md:p-8">
+      <div className="mb-6 h-5 w-32 rounded-full bg-[#e8e1d6] animate-pulse" />
+      <div className="data-soft-grid h-[320px] rounded-[28px] bg-[#fbf7f0]" />
     </div>
   );
 }
@@ -40,15 +82,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  
+
   useEffect(() => {
     fetchSummary();
   }, []);
-  
+
   const fetchSummary = async () => {
     try {
       const response = await axios.get(`${BACKEND_URL}/api/dashboard/summary`, {
-        withCredentials: true
+        withCredentials: true,
       });
       setSummary(response.data);
     } catch (error) {
@@ -57,7 +99,7 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
-  
+
   const handleDownloadMonthlyReport = async () => {
     setDownloadingPdf(true);
     try {
@@ -65,24 +107,26 @@ export default function Dashboard() {
         `${BACKEND_URL}/api/reports/monthly-spreadsheet?month=${selectedMonth}`,
         {
           withCredentials: true,
-          responseType: 'blob'
+          responseType: 'blob',
         }
       );
-      
-      // Create download link
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      
-      const monthName = new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+      const monthName = new Date(`${selectedMonth}-01T12:00:00`).toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      });
       const filename = `timesheet_${monthName.replace(' ', '_')}.pdf`;
-      
+
       link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      
+
       toast.success('Monthly report downloaded');
     } catch (error) {
       console.error('Failed to download report:', error);
@@ -95,199 +139,300 @@ export default function Dashboard() {
       setDownloadingPdf(false);
     }
   };
-  
+
+  const selectedMonthLabel = new Date(`${selectedMonth}-01T12:00:00`).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+  const balanceValue = summary?.balance ?? 0;
+  const balancePositive = balanceValue >= 0;
+
   const metrics = [
     {
       icon: DollarSign,
-      label: 'Total Earnings',
-      value: `$${summary?.total_earnings?.toFixed(2) || '0.00'}`,
-      color: '#3A5A40',
-      testId: 'metric-earnings'
+      label: 'Total earnings',
+      value: formatCurrency(summary?.total_earnings),
+      detail: 'Across all logged work',
+      featured: true,
+      span: 'xl:col-span-5',
+      testId: 'metric-earnings',
     },
     {
-      icon: summary?.balance < 0 ? TrendingDown : TrendingUp,
+      icon: balancePositive ? TrendingUp : TrendingDown,
       label: 'Balance',
-      value: `$${summary?.balance?.toFixed(2) || '0.00'}`,
-      color: summary?.balance >= 0 ? '#3A5A40' : '#E07A5F',
-      testId: 'metric-balance'
-    },
-    {
-      icon: Clock,
-      label: 'Total Hours',
-      value: summary?.total_hours?.toFixed(1) || '0.0',
-      color: '#A3B18A',
-      testId: 'metric-hours'
-    },
-    {
-      icon: Briefcase,
-      label: 'Active Jobs',
-      value: summary?.active_jobs || 0,
-      color: '#344E41',
-      testId: 'metric-jobs'
+      value: formatCurrency(balanceValue),
+      detail: balancePositive ? 'Still outstanding to you' : 'Payments ahead of earnings',
+      tone: balancePositive ? 'fresh' : 'warm',
+      span: 'xl:col-span-3',
+      testId: 'metric-balance',
     },
     {
       icon: DollarSign,
-      label: 'Payments Received',
-      value: `$${summary?.payments_received?.toFixed(2) || '0.00'}`,
-      color: '#588157',
-      testId: 'metric-payments'
+      label: 'Payments received',
+      value: formatCurrency(summary?.payments_received),
+      detail: 'Money already collected',
+      tone: 'default',
+      span: 'xl:col-span-4',
+      testId: 'metric-payments',
+    },
+    {
+      icon: Clock,
+      label: 'Tracked hours',
+      value: `${formatHours(summary?.total_hours)} hrs`,
+      detail: 'Logged across all jobs',
+      tone: 'default',
+      span: 'xl:col-span-6',
+      testId: 'metric-hours',
+    },
+    {
+      icon: Briefcase,
+      label: 'Active jobs',
+      value: summary?.active_jobs || 0,
+      detail: summary?.active_jobs ? 'Current client engagements' : 'Ready for your first client',
+      tone: 'soft',
+      span: 'xl:col-span-6',
+      testId: 'metric-jobs',
     },
   ];
-  
+
   return (
-    <div data-testid="dashboard-page">
-      <div className="mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <h1 
-              className="text-4xl font-semibold tracking-tight text-[#344E41] mb-2" 
-              style={{ fontFamily: 'Outfit' }}
-            >
-              Dashboard
-            </h1>
-            <p className="text-base leading-relaxed text-[#5C6B61]">
-              Your earnings overview at a glance
+    <div className="space-y-6" data-testid="dashboard-page">
+      <section className="app-panel-solid relative overflow-hidden rounded-[32px] px-6 py-7 md:px-8 md:py-8">
+        <div className="pointer-events-none absolute -right-10 top-0 h-40 w-40 rounded-full bg-[rgba(167,239,138,0.22)] blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 left-0 h-40 w-40 rounded-full bg-[rgba(239,193,119,0.18)] blur-3xl" />
+
+        <div className="relative z-10 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="page-eyebrow">Freelance Finance Cockpit</div>
+            <h1 className="page-title mt-4">Dashboard</h1>
+            <p className="page-subtitle mt-3 max-w-xl">
+              A quick read on what you have earned, what has been paid, and what still needs
+              attention.
+            </p>
+
+            {!loading && (
+              <div className="mt-5 flex flex-wrap gap-3">
+                <span className="status-chip status-chip-positive">
+                  <Briefcase size={14} />
+                  {summary?.active_jobs
+                    ? `${summary.active_jobs} active job${summary.active_jobs !== 1 ? 's' : ''}`
+                    : 'Ready for your first client'}
+                </span>
+                <span
+                  className={cn(
+                    'status-chip',
+                    balancePositive ? 'status-chip-neutral' : 'status-chip-warm'
+                  )}
+                >
+                  {balancePositive
+                    ? `${formatCurrency(balanceValue)} outstanding`
+                    : 'Payments currently ahead'}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="w-full max-w-md rounded-[28px] border border-border/80 bg-white/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] backdrop-blur-xl">
+            <p className="page-eyebrow !bg-white/75">Monthly Export</p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <Label htmlFor="month_selector" className="text-sm font-semibold text-[#4c6154]">
+                  Month
+                </Label>
+                <Input
+                  id="month_selector"
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+
+              <Button
+                onClick={handleDownloadMonthlyReport}
+                disabled={downloadingPdf}
+                className="h-11 px-5 sm:w-auto"
+              >
+                {downloadingPdf ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Preparing...
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} />
+                    Export PDF
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-[#5a6d61]">
+              Build a polished timesheet for {selectedMonthLabel.toLowerCase()} in one click.
             </p>
           </div>
-          
-          <div className="flex items-end gap-3">
-            <div>
-              <Label htmlFor="month_selector" className="text-[#5C6B61] text-sm font-medium mb-1 block">
-                Select Month
-              </Label>
-              <Input
-                id="month_selector"
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="border-[#EAE6DF] focus:border-[#344E41] focus:ring-[#344E41] h-9 text-sm"
-              />
-            </div>
-            <Button
-              onClick={handleDownloadMonthlyReport}
-              disabled={downloadingPdf}
-              className="bg-[#344E41] hover:bg-[#2B3A28] text-white flex items-center gap-2 h-9 text-sm px-4 rounded-lg"
-            >
-              {downloadingPdf ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Download size={16} />
-                  Download
-                </>
-              )}
-            </Button>
-          </div>
         </div>
-      </div>
-      
-      {/* Metrics Grid */}
+      </section>
+
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
+          <SkeletonCard className="xl:col-span-5" />
+          <SkeletonCard className="xl:col-span-3" />
+          <SkeletonCard className="xl:col-span-4" />
+          <SkeletonCard className="xl:col-span-6" />
+          <SkeletonCard className="xl:col-span-6" />
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
-            {metrics.map((metric) => {
-              const Icon = metric.icon;
-              const alphaColor = metric.color + '18'; // Add 18 for alpha hex
-              
-              return (
-                <div
-                  key={metric.label}
-                  data-testid={metric.testId}
-                  className="bg-white border border-[#EAE6DF] rounded-xl p-5 shadow-sm transition-transform duration-200 hover:-translate-y-[2px] hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div 
-                      className="w-9 h-9 rounded-full flex items-center justify-center" 
-                      style={{ backgroundColor: alphaColor }}
-                    >
-                      <Icon size={17} style={{ color: metric.color }} />
-                    </div>
-                  </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
+          {metrics.map((metric) => {
+            const Icon = metric.icon;
+
+            return (
+              <article
+                key={metric.label}
+                data-testid={metric.testId}
+                className={cn(
+                  'relative overflow-hidden rounded-[30px] border p-5 md:p-6',
+                  metric.span,
+                  metric.featured
+                    ? 'border-transparent bg-[linear-gradient(135deg,#173229,#23483b)] text-white shadow-[0_32px_80px_-36px_rgba(23,50,41,0.75)]'
+                    : 'app-panel-solid'
+                )}
+              >
+                {metric.featured && (
+                  <div className="pointer-events-none absolute -right-10 top-0 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
+                )}
+
+                <div className="relative z-10 flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-[#5C6B61] uppercase tracking-wide mb-1">{metric.label}</p>
-                    <p 
-                      className="text-2xl font-semibold tracking-tight" 
-                      style={{ fontFamily: 'Outfit', color: metric.color }}
+                    <p
+                      className={cn(
+                        'text-xs font-semibold uppercase tracking-[0.18em]',
+                        metric.featured ? 'text-white/72' : 'text-[#607166]'
+                      )}
+                    >
+                      {metric.label}
+                    </p>
+                    <p
+                      className={cn(
+                        'metric-value mt-4',
+                        metric.featured ? 'text-white' : 'text-[#173229]'
+                      )}
                     >
                       {metric.value}
                     </p>
+                    <p
+                      className={cn(
+                        'mt-3 max-w-[18rem] text-sm leading-6',
+                        metric.featured ? 'text-white/70' : 'text-[#5a6d61]'
+                      )}
+                    >
+                      {metric.detail}
+                    </p>
+                  </div>
+
+                  <div
+                    className={cn(
+                      'flex h-12 w-12 items-center justify-center rounded-[16px]',
+                      metric.featured
+                        ? 'bg-white/10 text-white'
+                        : metric.tone === 'fresh'
+                          ? 'bg-[#a7ef8a]/35 text-[#1d4427]'
+                          : metric.tone === 'warm'
+                            ? 'bg-[#f3c5b7]/45 text-[#8a4d36]'
+                            : 'bg-[#173229]/8 text-[#173229]'
+                    )}
+                  >
+                    <Icon size={20} />
                   </div>
                 </div>
-              );
-            })}
-          </div>
-          
-          {/* Active Jobs Count Line */}
-          <div className="mb-8 text-sm text-[#5C6B61]">
-            {summary?.active_jobs > 0 ? (
-              <span>Tracking <strong className="text-[#344E41]">{summary.active_jobs}</strong> active job{summary.active_jobs !== 1 ? 's' : ''}</span>
-            ) : (
-              <span>No active jobs. <Link to="/jobs" className="text-[#344E41] underline">Add one</Link> to get started.</span>
-            )}
-          </div>
-        </>
+              </article>
+            );
+          })}
+        </div>
       )}
-      
-      {/* Job Breakdown Chart */}
+
       {loading ? (
         <SkeletonChart />
       ) : summary?.job_breakdown && summary.job_breakdown.length > 0 ? (
-        <div className="bg-white border border-[#EAE6DF] rounded-xl p-6 shadow-sm" data-testid="job-breakdown-chart">
-          <h2 
-            className="text-xl font-medium tracking-tight text-[#344E41] mb-6" 
-            style={{ fontFamily: 'Outfit' }}
-          >
-            Earnings by Job
-          </h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={summary.job_breakdown}>
-              <XAxis 
-                dataKey="job_name" 
-                tick={{ fill: '#8A9E90', fontSize: 12 }}
-                axisLine={{ stroke: '#EAE6DF' }}
-                tickLine={false}
-              />
-              <YAxis 
-                tick={{ fill: '#8A9E90', fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: 'white',
-                  border: '1px solid #EAE6DF',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                }}
-                formatter={(value) => [`$${value.toFixed(2)}`, 'Earnings']}
-              />
-              <Bar dataKey="earnings" fill="#344E41" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      ) : summary?.job_breakdown && summary.job_breakdown.length === 0 && !loading ? (
-        <div className="bg-white border border-[#EAE6DF] rounded-xl p-12 text-center shadow-sm" data-testid="empty-state">
-          <div className="max-w-md mx-auto">
-            <Briefcase size={48} className="mx-auto mb-4 text-[#A3B18A]" />
-            <h3 className="text-xl font-medium text-[#344E41] mb-2" style={{ fontFamily: 'Outfit' }}>
+        <section
+          className="app-panel-solid rounded-[32px] p-6 md:p-8"
+          data-testid="job-breakdown-chart"
+        >
+          <div className="flex flex-col gap-4 border-b border-border/70 pb-6 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="page-eyebrow">Revenue Mix</div>
+              <h2
+                className="mt-4 text-3xl font-semibold tracking-tight text-[#173229]"
+                style={{ fontFamily: 'Outfit' }}
+              >
+                Earnings by job
+              </h2>
+              <p className="mt-2 text-sm leading-7 text-[#5a6d61]">
+                See which engagements are carrying the month and where your workload is landing.
+              </p>
+            </div>
+
+            <span className="status-chip status-chip-neutral">{selectedMonthLabel}</span>
+          </div>
+
+          <div className="mt-6 h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={summary.job_breakdown}
+                margin={{ top: 12, right: 12, left: -12, bottom: 0 }}
+              >
+                <CartesianGrid vertical={false} stroke="rgba(24,54,45,0.08)" />
+                <XAxis
+                  dataKey="job_name"
+                  tick={{ fill: '#607166', fontSize: 12 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: '#607166', fontSize: 12 }}
+                  tickFormatter={formatAxisCurrency}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(167,239,138,0.12)' }}
+                  contentStyle={{
+                    backgroundColor: 'rgba(255,255,255,0.96)',
+                    border: '1px solid rgba(46,70,56,0.12)',
+                    borderRadius: '20px',
+                    boxShadow: '0 24px 60px -32px rgba(18,37,29,0.35)',
+                    backdropFilter: 'blur(14px)',
+                  }}
+                  labelStyle={{ color: '#173229', fontWeight: 600 }}
+                  formatter={(value) => [formatCurrency(Number(value)), 'Earnings']}
+                />
+                <Bar dataKey="earnings" fill="#173229" radius={[12, 12, 4, 4]} maxBarSize={56} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      ) : (
+        <section className="app-panel-solid rounded-[32px] p-12 text-center" data-testid="empty-state">
+          <div className="mx-auto max-w-md">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#a7ef8a]/25 text-[#173229]">
+              <Briefcase size={28} />
+            </div>
+            <h3
+              className="mt-6 text-3xl font-semibold tracking-tight text-[#173229]"
+              style={{ fontFamily: 'Outfit' }}
+            >
               No jobs yet
             </h3>
-            <p className="text-base text-[#5C6B61] mb-6">
-              Start by adding your first job to track your earnings
+            <p className="mt-3 text-base leading-7 text-[#5a6d61]">
+              Start with your first client to turn this dashboard into a live picture of your
+              earnings.
             </p>
+            <Button asChild variant="secondary" className="mt-6">
+              <Link to="/jobs">Add your first job</Link>
+            </Button>
           </div>
-        </div>
-      ) : null}
+        </section>
+      )}
     </div>
   );
 }
