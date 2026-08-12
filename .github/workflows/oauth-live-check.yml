@@ -1,0 +1,29 @@
+name: OAuth Live Check
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/mcp_server.py'
+      - 'backend/oauth_server.py'
+      - 'frontend/public/.well-known/**'
+      - '.github/workflows/oauth-live-check.yml'
+jobs:
+  check-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate discovery metadata and resource URL
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          a=json.loads(Path('frontend/public/.well-known/oauth-authorization-server').read_text())
+          p=json.loads(Path('frontend/public/.well-known/oauth-protected-resource/api/mcp').read_text())
+          assert a['issuer']=='https://trackyourbucks.fun'
+          assert a['authorization_endpoint']=='https://trackyourbucks.fun/api/oauth/authorize'
+          assert a['token_endpoint']=='https://trackyourbucks.fun/api/oauth/token'
+          assert p['resource']=='https://trackyourbucks.fun/api/mcp'
+          text=Path('backend/mcp_server.py').read_text()
+          assert 'resource_server_url=AnyHttpUrl("https://trackyourbucks.fun/api/mcp")' in text
+          print('OAuth discovery metadata is internally consistent')
+          PY
