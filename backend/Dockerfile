@@ -10,9 +10,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
 COPY server.py .
+COPY mcp_server.py .
+COPY main.py .
 
 # Expose port
 EXPOSE 8080
 
-# Run FastAPI
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run FastAPI + MCP
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
