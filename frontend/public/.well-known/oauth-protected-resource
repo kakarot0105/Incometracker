@@ -1,1 +1,0 @@
-{"resource":"https://trackyourbucks.fun/api/mcp","authorization_servers":["https://trackyourbucks.fun"],"scopes_supported":["trackyourbucks:read","trackyourbucks:write"],"bearer_methods_supported":["header"]}
