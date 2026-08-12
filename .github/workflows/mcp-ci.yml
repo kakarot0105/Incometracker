@@ -34,7 +34,7 @@ jobs:
           from main import app
           from mcp_server import mcp
 
-          assert any(getattr(route, 'path', None) == '/mcp' for route in app.routes)
+          assert any(getattr(route, 'path', None) == '/api/mcp' for route in app.routes)
 
           async def check_tools():
               tools = await mcp.list_tools()
