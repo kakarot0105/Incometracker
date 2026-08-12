@@ -19,4 +19,5 @@ async def lifespan(_app):
 
 
 app.router.lifespan_context = lifespan
-app.mount("/mcp", mcp_http_app)
+# Keep MCP below /api so the existing Nginx /api/ reverse proxy forwards it.
+app.mount("/api/mcp", mcp_http_app)
