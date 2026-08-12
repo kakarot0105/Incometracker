@@ -28,8 +28,11 @@ jobs:
           # Update backend
           cd backend
           source venv/bin/activate 2>/dev/null || true
-          pip install -r requirements.txt 2>/dev/null || true
-          pm2 restart backend 2>/dev/null || true
+          pip install -r requirements.txt
+          # Recreate the PM2 process so it uses the combined API + MCP entrypoint.
+          pm2 delete backend 2>/dev/null || true
+          pm2 start "venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000" --name backend
+          pm2 save
           
           # Build frontend
           cd ../frontend
