@@ -42,7 +42,17 @@ async def authorize(request:Request,response_type:str,client_id:str,redirect_uri
         # flow, not to stop on a 401 page. Preserve this same-origin request so
         # the React Google-login flow can resume it after creating a session.
         resume_path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
-        return RedirectResponse(f"/login?next={quote(resume_path, safe='')}", status_code=302)
+        response = RedirectResponse(f"/login?next={quote(resume_path, safe='')}", status_code=302)
+        response.set_cookie(
+            key="mcp_oauth_resume",
+            value=quote(resume_path, safe=""),
+            httponly=True,
+            secure=os.getenv("COOKIE_SECURE", "false").lower() == "true",
+            samesite="lax",
+            max_age=10 * 60,
+            path="/",
+        )
+        return response
     requested=[s for s in scope.split() if s in SCOPES] or [SCOPES[0]]; code=secrets.token_urlsafe(40)
     await _db.oauth_codes.insert_one({"code":code,"client_id":client_id,"redirect_uri":redirect_uri,"code_challenge":code_challenge,"user_id":user_id,"scopes":requested,"expires_at":_now()+timedelta(minutes=5),"used":False})
     return RedirectResponse(redirect_uri+("&" if "?" in redirect_uri else "?")+urlencode({"code":code,"state":state}),302)

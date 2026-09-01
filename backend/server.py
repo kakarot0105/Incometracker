@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
+from urllib.parse import unquote
 import httpx
 from io import BytesIO
 from reportlab.lib import colors
@@ -277,6 +278,21 @@ async def google_auth(code_data: dict, response: Response):
 async def get_me(request: Request, session_token: Optional[str] = Cookie(None)):
     """Get current user"""
     return await get_current_user(request, session_token)
+
+@api_router.get("/auth/oauth-resume")
+async def get_oauth_resume(
+    request: Request,
+    response: Response,
+    session_token: Optional[str] = Cookie(None),
+    mcp_oauth_resume: Optional[str] = Cookie(None),
+):
+    """Return and clear the same-origin MCP authorization request after login."""
+    await get_current_user(request, session_token)
+    response.delete_cookie(key="mcp_oauth_resume", path="/")
+    resume_path = unquote(mcp_oauth_resume or "")
+    if resume_path and not resume_path.startswith("/api/oauth/authorize?"):
+        raise HTTPException(status_code=400, detail="Invalid OAuth continuation")
+    return {"next": resume_path or None}
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response, session_token: Optional[str] = Cookie(None)):

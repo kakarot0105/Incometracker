@@ -44,7 +44,10 @@ export default function AuthCallback() {
 
         const user = response.data;
 
-        const postLoginRedirect = sessionStorage.getItem('post_login_redirect');
+        const resumeResponse = await axios.get(`${BACKEND_URL}/api/auth/oauth-resume`, {
+          withCredentials: true,
+        });
+        const postLoginRedirect = resumeResponse.data?.next || sessionStorage.getItem('post_login_redirect');
         sessionStorage.removeItem('post_login_redirect');
         window.history.replaceState(null, '', '/');
         sessionStorage.removeItem('oauth_state');
