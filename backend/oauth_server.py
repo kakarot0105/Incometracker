@@ -1,7 +1,7 @@
 """OAuth 2.1 endpoints used by MCP clients such as ChatGPT."""
 import base64, hashlib, os, secrets
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -37,7 +37,12 @@ async def authorize(request:Request,response_type:str,client_id:str,redirect_uri
     client=await _db.oauth_clients.find_one({"client_id":client_id},{"_id":0})
     if not client or redirect_uri not in client.get("redirect_uris",[]):raise HTTPException(400,"Invalid OAuth client or redirect URI")
     user_id=await _session_user(request)
-    if not user_id:return HTMLResponse("<!doctype html><html><body style='font-family:system-ui;max-width:620px;margin:60px auto'><h2>Sign in to Track Your Bucks</h2><p>Sign in to Track Your Bucks in this browser, then return to ChatGPT and press Connect again.</p><p><a href='/login'>Open Track Your Bucks sign in</a></p></body></html>",status_code=401)
+    if not user_id:
+        # MCP clients expect the authorization endpoint to continue an OAuth
+        # flow, not to stop on a 401 page. Preserve this same-origin request so
+        # the React Google-login flow can resume it after creating a session.
+        resume_path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(f"/login?next={quote(resume_path, safe='')}", status_code=302)
     requested=[s for s in scope.split() if s in SCOPES] or [SCOPES[0]]; code=secrets.token_urlsafe(40)
     await _db.oauth_codes.insert_one({"code":code,"client_id":client_id,"redirect_uri":redirect_uri,"code_challenge":code_challenge,"user_id":user_id,"scopes":requested,"expires_at":_now()+timedelta(minutes=5),"used":False})
     return RedirectResponse(redirect_uri+("&" if "?" in redirect_uri else "?")+urlencode({"code":code,"state":state}),302)

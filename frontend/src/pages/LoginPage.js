@@ -34,6 +34,16 @@ export default function LoginPage() {
       return;
     }
 
+    const next = new URLSearchParams(window.location.search).get('next');
+    // Only permit the fixed, same-origin OAuth endpoint as a post-login
+    // destination. This preserves an MCP authorization request without
+    // creating an open redirect on the regular sign-in page.
+    if (next?.startsWith('/api/oauth/authorize?')) {
+      sessionStorage.setItem('post_login_redirect', next);
+    } else {
+      sessionStorage.removeItem('post_login_redirect');
+    }
+
     const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
     const scope = encodeURIComponent('email profile');
     const state = Math.random().toString(36).substring(7);

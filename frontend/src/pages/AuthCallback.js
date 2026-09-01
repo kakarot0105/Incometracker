@@ -44,9 +44,15 @@ export default function AuthCallback() {
 
         const user = response.data;
 
-        // Clear URL params
+        const postLoginRedirect = sessionStorage.getItem('post_login_redirect');
+        sessionStorage.removeItem('post_login_redirect');
         window.history.replaceState(null, '', '/');
         sessionStorage.removeItem('oauth_state');
+
+        if (postLoginRedirect) {
+          window.location.assign(postLoginRedirect);
+          return;
+        }
 
         navigate('/', { state: { user }, replace: true });
       } catch (error) {
