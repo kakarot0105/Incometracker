@@ -65,9 +65,10 @@ jobs:
             rsync -av --delete build/ /var/www/trackyourbucks/
             chmod -R 755 /var/www/trackyourbucks/
             chown -R www-data:www-data /var/www/trackyourbucks/
-            # RFC OAuth discovery documents have extensionless filenames. Make
-            # Nginx label those static responses as JSON for MCP clients.
-            printf '%s\n' 'default_type application/json;' > /etc/nginx/conf.d/incometracker-mcp-metadata.conf
+            # RFC OAuth discovery documents have extensionless filenames. The
+            # Ubuntu Nginx configuration otherwise serves them as octet-stream.
+            rm -f /etc/nginx/conf.d/incometracker-mcp-metadata.conf
+            sed -i 's/default_type application\/octet-stream;/default_type application\/json;/' /etc/nginx/nginx.conf
             nginx -t
             systemctl reload nginx
             echo "✅ Deployment complete!"
