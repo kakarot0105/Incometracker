@@ -14,7 +14,7 @@ import {
 import axios from 'axios';
 import { toast } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -68,6 +68,9 @@ export default function Layout() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setSidebarOpen((open) => !open)}
+            aria-label={sidebarOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={sidebarOpen}
+            aria-controls="sidebar-navigation"
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white/80 text-[#355247] transition-colors hover:bg-white"
             data-testid="mobile-menu-button"
           >
@@ -120,7 +123,7 @@ export default function Layout() {
             </div>
           </div>
 
-          <nav className="flex-1 px-3 py-4" data-testid="sidebar-nav">
+          <nav id="sidebar-navigation" className="flex-1 px-3 py-4" data-testid="sidebar-nav">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive =

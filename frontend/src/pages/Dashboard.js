@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -186,7 +186,7 @@ export default function Dashboard() {
     {
       icon: DollarSign,
       label: 'Payments received',
-      value: formatCurrency(summary?.payments_received),
+      value: formatCurrency(summary?.total_payments),
       detail: 'Money already collected',
       tone: 'default',
       span: 'xl:col-span-4',
@@ -255,11 +255,11 @@ export default function Dashboard() {
               <div className="flex bg-white/50 backdrop-blur-md border border-black/5 rounded-full p-1 shadow-sm">
                 <button
                   onClick={() => setExportMode('month')}
-                  className={cn("text-[11px] font-medium px-3 py-1 rounded-full transition-all duration-200", exportMode === 'month' ? "bg-[#061b31] text-white shadow-md" : "text-[#5a6d61] hover:text-[#061b31]")}
+                  className={cn("text-[11px] font-medium px-3 py-1 rounded-full transition-all duration-200", exportMode === 'month' ? "bg-[#173229] text-white shadow-md" : "text-[#5a6d61] hover:text-[#173229]")}
                 >By Month</button>
                 <button
                   onClick={() => setExportMode('range')}
-                  className={cn("text-[11px] font-medium px-3 py-1 rounded-full transition-all duration-200", exportMode === 'range' ? "bg-[#061b31] text-white shadow-md" : "text-[#5a6d61] hover:text-[#061b31]")}
+                  className={cn("text-[11px] font-medium px-3 py-1 rounded-full transition-all duration-200", exportMode === 'range' ? "bg-[#173229] text-white shadow-md" : "text-[#5a6d61] hover:text-[#173229]")}
                 >Custom Range</button>
               </div>
             </div>

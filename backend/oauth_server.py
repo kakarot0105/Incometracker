@@ -13,8 +13,6 @@ def _pkce_ok(v,c): return secrets.compare_digest(base64.urlsafe_b64encode(hashli
 async def _issue_access(user_id,client_id,scopes):
     access=secrets.token_urlsafe(48); expires=_now()+timedelta(hours=1)
     await _db.oauth_access_tokens.insert_one({"access_token":access,"user_id":user_id,"client_id":client_id,"scopes":scopes,"expires_at":expires})
-    # MCP already validates user_sessions; mirror the OAuth access token there so one verifier protects both web and MCP traffic.
-    await _db.user_sessions.insert_one({"session_token":access,"user_id":user_id,"expires_at":expires,"oauth_client_id":client_id,"oauth_scopes":scopes})
     return access
 @router.post("/register")
 async def register_client(request:Request):

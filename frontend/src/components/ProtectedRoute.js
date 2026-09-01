@@ -3,21 +3,13 @@ import { Navigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function ProtectedRoute({ children }) {
   const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    location.state?.user ? true : null
-  );
-  const [user, setUser] = useState(location.state?.user || null);
+  const [isAuthenticated, setIsAuthenticated] = useState(null);
   
   useEffect(() => {
-    // If user data passed from AuthCallback, skip auth check
-    if (location.state?.user) {
-      return;
-    }
-    
     const checkAuth = async () => {
       try {
         const response = await axios.get(`${BACKEND_URL}/api/auth/me`, {
@@ -25,7 +17,6 @@ export default function ProtectedRoute({ children }) {
         });
         
         if (response.status === 200) {
-          setUser(response.data);
           setIsAuthenticated(true);
         } else {
           setIsAuthenticated(false);

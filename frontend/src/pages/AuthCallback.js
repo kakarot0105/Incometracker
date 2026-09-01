@@ -4,7 +4,7 @@ import axios from 'axios';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { toast } from 'sonner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export default function AuthCallback() {
   const navigate = useNavigate();

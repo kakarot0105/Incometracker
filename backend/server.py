@@ -285,6 +285,10 @@ async def logout(request: Request, response: Response, session_token: Optional[s
     
     # Delete all sessions for this user
     await db.user_sessions.delete_many({"user_id": user.user_id})
+    # Revoke MCP OAuth credentials too; otherwise a connected client remains
+    # authenticated after the user has explicitly signed out of the website.
+    await db.oauth_access_tokens.delete_many({"user_id": user.user_id})
+    await db.oauth_refresh_tokens.delete_many({"user_id": user.user_id})
     
     # Clear cookie
     response.delete_cookie(key="session_token", path="/")
@@ -940,6 +944,14 @@ async def generate_earnings_statement(
         f"This statement was generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}",
         footer_style
     ))
+    doc.build(elements)
+    pdf_data = buffer.getvalue()
+    buffer.close()
+    return StreamingResponse(
+        BytesIO(pdf_data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=earnings_statement.pdf"},
+    )
     
 # ============ Simple Monthly Spreadsheet Report ============
 
