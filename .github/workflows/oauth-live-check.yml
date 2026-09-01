@@ -22,8 +22,8 @@ jobs:
           assert a['issuer']=='https://trackyourbucks.fun'
           assert a['authorization_endpoint']=='https://trackyourbucks.fun/api/oauth/authorize'
           assert a['token_endpoint']=='https://trackyourbucks.fun/api/oauth/token'
-          assert p['resource']=='https://trackyourbucks.fun/api/mcp'
+          assert p['resource']=='https://trackyourbucks.fun/api/mcp/'
           text=Path('backend/mcp_server.py').read_text()
-          assert 'resource_server_url=AnyHttpUrl("https://trackyourbucks.fun/api/mcp")' in text
+          assert 'resource_server_url=AnyHttpUrl("https://trackyourbucks.fun/api/mcp/")' in text
           print('OAuth discovery metadata is internally consistent')
           PY

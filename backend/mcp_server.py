@@ -66,7 +66,7 @@ mcp = MCPServer(
     description="Read and update the authenticated user's jobs, work hours, payments, and reports.",
     website_url="https://trackyourbucks.fun",
     token_verifier=IncomeTrackerTokenVerifier(),
-    auth=AuthSettings(issuer_url=AnyHttpUrl("https://trackyourbucks.fun"), resource_server_url=AnyHttpUrl("https://trackyourbucks.fun/api/mcp"), required_scopes=[READ_SCOPE]),
+    auth=AuthSettings(issuer_url=AnyHttpUrl("https://trackyourbucks.fun"), resource_server_url=AnyHttpUrl("https://trackyourbucks.fun/api/mcp/"), required_scopes=[READ_SCOPE]),
 )
 
 
