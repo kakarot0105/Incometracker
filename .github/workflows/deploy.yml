@@ -65,6 +65,10 @@ jobs:
             rsync -av --delete build/ /var/www/trackyourbucks/
             chmod -R 755 /var/www/trackyourbucks/
             chown -R www-data:www-data /var/www/trackyourbucks/
+            # RFC OAuth discovery documents have extensionless filenames. Make
+            # Nginx label those static responses as JSON for MCP clients.
+            printf '%s\n' 'default_type application/json;' > /etc/nginx/conf.d/incometracker-mcp-metadata.conf
+            nginx -t
             systemctl reload nginx
             echo "✅ Deployment complete!"
           else
