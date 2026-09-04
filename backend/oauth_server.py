@@ -5,7 +5,7 @@ from urllib.parse import quote, urlencode, urlparse
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from motor.motor_asyncio import AsyncIOMotorClient
-ISSUER="https://trackyourbucks.fun"; SCOPES=["trackyourbucks:read","trackyourbucks:write"]
+ISSUER="https://trackyourbucks.fun"; SCOPES=["trackyourbucks:read","trackyourbucks:write","offline_access"]
 router=APIRouter(prefix="/api/oauth"); _client=AsyncIOMotorClient(os.environ["MONGO_URL"]); _db=_client[os.environ["DB_NAME"]]
 def _now(): return datetime.now(timezone.utc)
 def _safe_redirect(uri): p=urlparse(uri); return p.scheme=="https" and bool(p.netloc)
@@ -19,8 +19,9 @@ async def register_client(request:Request):
     body=await request.json(); redirects=body.get("redirect_uris") or []
     if not redirects or any(not _safe_redirect(x) for x in redirects): raise HTTPException(400,"Valid HTTPS redirect_uris are required")
     client_id="mcp_"+secrets.token_urlsafe(24); name=body.get("client_name","MCP Client")
+    issued_at = int(_now().timestamp())
     await _db.oauth_clients.insert_one({"client_id":client_id,"redirect_uris":redirects,"client_name":name,"created_at":_now()})
-    return {"client_id":client_id,"redirect_uris":redirects,"client_name":name,"token_endpoint_auth_method":"none"}
+    return {"client_id":client_id,"client_id_issued_at":issued_at,"redirect_uris":redirects,"client_name":name,"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}
 async def _session_user(request):
     token=request.cookies.get("session_token")
     if not token:
