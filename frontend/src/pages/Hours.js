@@ -194,27 +194,17 @@ export default function Hours() {
         await Promise.all(requests);
         toast.success(`${requests.length} day(s) logged successfully`);
       } else {
-        const requests = monthlyForm.entries
-          .filter((entry) => entry.hours && parseFloat(entry.hours) > 0)
-          .map((entry) =>
-            axios.post(
-              `${BACKEND_URL}/api/hours`,
-              {
-                job_id: monthlyForm.job_id,
-                date: entry.date,
-                hours_worked: parseFloat(entry.hours),
-              },
-              { withCredentials: true }
-            )
-          );
-
-        if (requests.length === 0) {
-          toast.error('Please enter hours for at least one day');
+        const totalHours = parseFloat(monthlyForm.entries[0]?.hours);
+        if (!totalHours || totalHours <= 0) {
+          toast.error('Please enter a total greater than zero');
           return;
         }
-
-        await Promise.all(requests);
-        toast.success(`${requests.length} day(s) logged successfully`);
+        await axios.post(
+          `${BACKEND_URL}/api/hours/monthly`,
+          { job_id: monthlyForm.job_id, month: monthlyForm.month, total_hours: totalHours },
+          { withCredentials: true }
+        );
+        toast.success('Monthly total logged successfully');
       }
 
       setDialogOpen(false);
@@ -258,7 +248,6 @@ export default function Hours() {
     (parseFloat(dailyForm.hours_worked) || 0) * (selectedDailyJob?.hourly_rate || 0);
   const monthlyEstimatedEarnings =
     (parseFloat(monthlyForm.entries[0]?.hours) || 0) * (monthlySelectedJob?.hourly_rate || 0);
-  const monthlyEntryDate = monthlyForm.entries[0]?.date || `${monthlyForm.month}-01`;
 
   const groupedHours = hours.reduce((accumulator, log) => {
     const month = log.date.slice(0, 7);
@@ -595,24 +584,8 @@ export default function Hours() {
                         />
                       </div>
 
-                      <div>
-                        <Label htmlFor="entry_date" className="text-sm font-semibold text-[#4c6154]">
-                          Entry date
-                        </Label>
-                      <Input
-                        id="entry_date"
-                        type="date"
-                        value={monthlyEntryDate}
-                        className="mt-2"
-                        onChange={(e) => {
-                          setMonthlyForm({
-                            ...monthlyForm,
-                            entries: monthlyForm.entries.length > 0
-                              ? [{ ...monthlyForm.entries[0], date: e.target.value }]
-                              : [{ date: e.target.value, hours: '' }],
-                          });
-                        }}
-                      />
+                      <div className="rounded-[20px] border border-[#dbe3da] bg-white/60 px-4 py-3 text-sm leading-6 text-[#5a6d61]">
+                        The entry covers the entire calendar month and is stored as one aggregate record.
                       </div>
                     </div>
 
@@ -723,7 +696,9 @@ export default function Hours() {
                           </div>
                           <div>
                             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#607166]">
-                              {formatShortDate(log.date)}
+                              {log.entry_type === 'range'
+                                ? `${formatShortDate(log.start_date)} – ${formatShortDate(log.end_date)}`
+                                : formatShortDate(log.date)}
                             </p>
                             <h3 className="mt-2 text-xl font-semibold tracking-tight text-[#173229]" style={{ fontFamily: 'Outfit' }}>
                               {log.job_name}
@@ -774,7 +749,11 @@ export default function Hours() {
             </DialogTitle>
             <DialogDescription>
               Remove the entry for <strong className="text-[#173229]">{logToDelete?.job_name}</strong> on{' '}
-              {logToDelete ? new Date(logToDelete.date).toLocaleDateString() : ''}. This cannot be undone.
+            {logToDelete
+              ? logToDelete.entry_type === 'range'
+                ? `${new Date(logToDelete.start_date).toLocaleDateString()} to ${new Date(logToDelete.end_date).toLocaleDateString()}`
+                : new Date(logToDelete.date).toLocaleDateString()
+              : ''}. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
 

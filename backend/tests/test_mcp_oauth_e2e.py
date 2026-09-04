@@ -117,7 +117,10 @@ def test_oauth_pkce_then_authenticated_mcp_tool_discovery():
     )
     tool_list.raise_for_status()
     names = {tool["name"] for tool in tool_list.json()["result"]["tools"]}
-    assert {"get_earnings_summary", "create_job", "generate_invoice"} <= names
+    assert {
+        "get_earnings_summary", "create_job", "generate_invoice",
+        "add_hours_range", "add_monthly_hours",
+    } <= names
 
     summary = requests.post(
         f"{BASE_URL}/api/mcp/",

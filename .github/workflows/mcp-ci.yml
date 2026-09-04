@@ -41,7 +41,8 @@ jobs:
               names = {tool.name for tool in tools}
               expected = {
                   'get_earnings_summary', 'list_jobs', 'get_hours',
-                  'get_payments', 'add_hours', 'add_payment'
+                  'get_payments', 'add_hours', 'add_hours_range',
+                  'add_monthly_hours', 'add_payment'
               }
               missing = expected - names
               assert not missing, f'Missing MCP tools: {missing}'
@@ -49,3 +50,5 @@ jobs:
           asyncio.run(check_tools())
           print('MCP integration checks passed')
           PY
+      - name: Run MCP hour-log unit tests
+        run: pytest -q tests/test_mcp_hours_ranges.py

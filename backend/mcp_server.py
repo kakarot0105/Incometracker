@@ -87,9 +87,9 @@ def _user_id(ctx: Context, required_scope: str = READ_SCOPE) -> str:
 
 def _date_query(start_date: Optional[str], end_date: Optional[str]) -> dict[str, str]:
     if start_date:
-        datetime.fromisoformat(start_date)
+        datetime.strptime(start_date, "%Y-%m-%d")
     if end_date:
-        datetime.fromisoformat(end_date)
+        datetime.strptime(end_date, "%Y-%m-%d")
     if start_date and end_date and start_date > end_date:
         raise ValueError("start_date must not be after end_date")
     query: dict[str, str] = {}
@@ -98,6 +98,67 @@ def _date_query(start_date: Optional[str], end_date: Optional[str]) -> dict[str,
     if end_date:
         query["$lte"] = end_date
     return query
+
+
+def _hours_query(user_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None, job_id: Optional[str] = None) -> dict:
+    """Match single-day logs and logical range logs that overlap a period."""
+    _date_query(start_date, end_date)
+    query: dict = {"user_id": user_id}
+    if job_id:
+        query["job_id"] = job_id
+    if not start_date and not end_date:
+        return query
+
+    daily_dates = _date_query(start_date, end_date)
+    range_overlap: dict = {"entry_type": "range"}
+    if start_date:
+        range_overlap["end_date"] = {"$gte": start_date}
+    if end_date:
+        range_overlap["start_date"] = {"$lte": end_date}
+    query["$or"] = [
+        {"entry_type": {"$ne": "range"}, "date": daily_dates},
+        range_overlap,
+    ]
+    return query
+
+
+def _validated_month_range(month: str) -> tuple[str, str]:
+    try:
+        year, month_number = map(int, month.split("-"))
+        if len(month) != 7:
+            raise ValueError
+        return f"{month}-01", f"{month}-{calendar.monthrange(year, month_number)[1]:02d}"
+    except (TypeError, ValueError) as error:
+        raise ValueError("month must use YYYY-MM format") from error
+
+
+async def _add_hours_range(
+    user_id: str, job_id: str, start_date: str, end_date: str, total_hours: float, notes: Optional[str]
+) -> dict:
+    _date_query(start_date, end_date)
+    if total_hours <= 0:
+        raise ValueError("total_hours must be greater than 0")
+    job = await _job_for_user(user_id, job_id)
+    log = {
+        "log_id": f"log_{uuid.uuid4().hex[:12]}",
+        "user_id": user_id,
+        "job_id": job_id,
+        "job_name": job["job_name"],
+        "hourly_rate": float(job["hourly_rate"]),
+        # Keep date as the range start for legacy ordering and clients, while the
+        # range fields remain the source of truth for period-aware reports.
+        "date": start_date,
+        "entry_type": "range",
+        "start_date": start_date,
+        "end_date": end_date,
+        "hours_worked": float(total_hours),
+        "calculated_pay": float(total_hours) * float(job["hourly_rate"]),
+        "notes": notes,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await _db.hours_logs.insert_one(log)
+    log.pop("user_id")
+    return log
 
 
 async def _job_for_user(user_id: str, job_id: str) -> dict:
@@ -180,19 +241,14 @@ async def delete_job(ctx: Context, job_id: str) -> dict:
 
 @mcp.tool()
 async def get_hours(ctx: Context, start_date: Optional[str] = None, end_date: Optional[str] = None, job_id: Optional[str] = None) -> list[dict]:
-    """List logged work hours, optionally filtered by job or inclusive date range."""
-    query: dict = {"user_id": _user_id(ctx)}
-    if job_id:
-        query["job_id"] = job_id
-    dates = _date_query(start_date, end_date)
-    if dates:
-        query["date"] = dates
+    """List daily and aggregate range logs, optionally filtered by job or overlapping dates."""
+    query = _hours_query(_user_id(ctx), start_date, end_date, job_id)
     return _serialize(await _db.hours_logs.find(query, {"_id": 0, "user_id": 0}).sort("date", -1).to_list(1000))
 
 
 @mcp.tool()
 async def add_hours(ctx: Context, job_id: str, date: str, hours_worked: float = Field(gt=0, le=24)) -> dict:
-    """Log hours worked against an existing job."""
+    """Log hours for one day only (maximum 24 hours). Use add_hours_range for aggregate periods."""
     datetime.fromisoformat(date)
     user_id = _user_id(ctx, WRITE_SCOPE)
     job = await _job_for_user(user_id, job_id)
@@ -200,6 +256,19 @@ async def add_hours(ctx: Context, job_id: str, date: str, hours_worked: float = 
     await _db.hours_logs.insert_one(log)
     log.pop("user_id")
     return log
+
+
+@mcp.tool()
+async def add_hours_range(ctx: Context, job_id: str, start_date: str, end_date: str, total_hours: float = Field(gt=0, le=1_000_000_000), notes: Optional[str] = Field(default=None, max_length=2000)) -> dict:
+    """Log aggregate hours across an inclusive date range as one record; total_hours is not limited to 24."""
+    return _serialize(await _add_hours_range(_user_id(ctx, WRITE_SCOPE), job_id, start_date, end_date, float(total_hours), notes))
+
+
+@mcp.tool()
+async def add_monthly_hours(ctx: Context, job_id: str, month: str, total_hours: float = Field(gt=0, le=1_000_000_000), notes: Optional[str] = Field(default=None, max_length=2000)) -> dict:
+    """Log aggregate hours for one calendar month as one record; month uses YYYY-MM."""
+    start_date, end_date = _validated_month_range(month)
+    return _serialize(await _add_hours_range(_user_id(ctx, WRITE_SCOPE), job_id, start_date, end_date, float(total_hours), notes))
 
 
 @mcp.tool()
@@ -250,13 +319,9 @@ async def delete_payment(ctx: Context, payment_id: str) -> dict:
 async def generate_invoice(ctx: Context, job_id: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None, invoice_number: Optional[str] = Field(default=None, max_length=100), notes: Optional[str] = Field(default=None, max_length=2000)) -> dict:
     """Build the data used by the website's invoice PDF for selected work."""
     user_id = _user_id(ctx)
-    query: dict = {"user_id": user_id}
     if job_id:
         await _job_for_user(user_id, job_id)
-        query["job_id"] = job_id
-    dates = _date_query(start_date, end_date)
-    if dates:
-        query["date"] = dates
+    query = _hours_query(user_id, start_date, end_date, job_id)
     lines = await _db.hours_logs.find(query, {"_id": 0, "user_id": 0}).sort("date", 1).to_list(10000)
     if not lines:
         raise ValueError("No hours logs found for the specified criteria")

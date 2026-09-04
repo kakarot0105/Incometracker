@@ -9,6 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 import uuid
+import calendar
 from datetime import datetime, timezone, timedelta
 from urllib.parse import unquote
 import httpx
@@ -80,11 +81,28 @@ class HoursLog(BaseModel):
     hours_worked: float
     calculated_pay: float
     created_at: datetime
+    entry_type: str = "daily"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    notes: Optional[str] = None
 
 class HoursLogCreate(BaseModel):
     job_id: str
     date: str
     hours_worked: float
+
+class HoursRangeLogCreate(BaseModel):
+    job_id: str
+    start_date: str
+    end_date: str
+    total_hours: float = Field(gt=0)
+    notes: Optional[str] = None
+
+class MonthlyHoursLogCreate(BaseModel):
+    job_id: str
+    month: str
+    total_hours: float = Field(gt=0)
+    notes: Optional[str] = None
 
 class Payment(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -110,6 +128,82 @@ class DashboardSummary(BaseModel):
     total_hours: float
     active_jobs: int
     job_breakdown: List[dict]
+
+
+def validate_date_range(start_date: str, end_date: str) -> None:
+    """Validate the ISO dates used by both daily and aggregate hour logs."""
+    try:
+        datetime.strptime(start_date, "%Y-%m-%d")
+        datetime.strptime(end_date, "%Y-%m-%d")
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail="Dates must use YYYY-MM-DD format") from error
+    if start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must not be after end_date")
+
+
+def month_date_range(month: str) -> tuple[str, str]:
+    try:
+        if len(month) != 7:
+            raise ValueError
+        year, month_number = map(int, month.split("-"))
+        return f"{month}-01", f"{month}-{calendar.monthrange(year, month_number)[1]:02d}"
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail="month must use YYYY-MM format") from error
+
+
+def hours_period_query(user_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None, job_id: Optional[str] = None) -> dict:
+    """Return each logical log once, including aggregate logs overlapping a period."""
+    query: dict = {"user_id": user_id}
+    if job_id:
+        query["job_id"] = job_id
+    if not start_date and not end_date:
+        return query
+    if start_date and end_date:
+        validate_date_range(start_date, end_date)
+    elif start_date:
+        validate_date_range(start_date, start_date)
+    else:
+        validate_date_range(end_date, end_date)
+    dates = {}
+    if start_date:
+        dates["$gte"] = start_date
+    if end_date:
+        dates["$lte"] = end_date
+    range_overlap: dict = {"entry_type": "range"}
+    if start_date:
+        range_overlap["end_date"] = {"$gte": start_date}
+    if end_date:
+        range_overlap["start_date"] = {"$lte": end_date}
+    query["$or"] = [
+        {"entry_type": {"$ne": "range"}, "date": dates},
+        range_overlap,
+    ]
+    return query
+
+
+async def insert_hours_range(user: User, hours_create: HoursRangeLogCreate) -> HoursLog:
+    validate_date_range(hours_create.start_date, hours_create.end_date)
+    job = await db.jobs.find_one({"job_id": hours_create.job_id, "user_id": user.user_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    log_doc = {
+        "log_id": f"log_{uuid.uuid4().hex[:12]}", "user_id": user.user_id,
+        "job_id": hours_create.job_id, "job_name": job["job_name"],
+        "hourly_rate": job["hourly_rate"], "date": hours_create.start_date,
+        "entry_type": "range", "start_date": hours_create.start_date,
+        "end_date": hours_create.end_date, "hours_worked": hours_create.total_hours,
+        "calculated_pay": hours_create.total_hours * job["hourly_rate"],
+        "notes": hours_create.notes, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.hours_logs.insert_one(log_doc)
+    log_doc["created_at"] = datetime.fromisoformat(log_doc["created_at"])
+    return HoursLog(**log_doc)
+
+
+def hours_log_date_label(log: dict) -> str:
+    if log.get("entry_type") == "range":
+        return f"{log['start_date']} – {log['end_date']}"
+    return log["date"]
 
 # ============ Auth Helper ============
 
@@ -402,10 +496,7 @@ async def get_hours(request: Request, session_token: Optional[str] = Cookie(None
     """Get all hours logs for current user"""
     user = await get_current_user(request, session_token)
     
-    logs = await db.hours_logs.find(
-        {"user_id": user.user_id},
-        {"_id": 0}
-    ).sort("date", -1).to_list(1000)
+    logs = await db.hours_logs.find(hours_period_query(user.user_id), {"_id": 0}).sort("date", -1).to_list(1000)
     
     for log in logs:
         if isinstance(log['created_at'], str):
@@ -445,6 +536,20 @@ async def create_hours_log(hours_create: HoursLogCreate, request: Request, sessi
     log_doc['created_at'] = datetime.fromisoformat(log_doc['created_at'])
     
     return HoursLog(**log_doc)
+
+@api_router.post("/hours/range", response_model=HoursLog)
+async def create_hours_range_log(hours_create: HoursRangeLogCreate, request: Request, session_token: Optional[str] = Cookie(None)):
+    """Create one aggregate work-hours record for an inclusive date range."""
+    return await insert_hours_range(await get_current_user(request, session_token), hours_create)
+
+@api_router.post("/hours/monthly", response_model=HoursLog)
+async def create_monthly_hours_log(hours_create: MonthlyHoursLogCreate, request: Request, session_token: Optional[str] = Cookie(None)):
+    """Create one aggregate work-hours record for a calendar month."""
+    start_date, end_date = month_date_range(hours_create.month)
+    return await insert_hours_range(
+        await get_current_user(request, session_token),
+        HoursRangeLogCreate(job_id=hours_create.job_id, start_date=start_date, end_date=end_date, total_hours=hours_create.total_hours, notes=hours_create.notes),
+    )
 
 @api_router.delete("/hours/{log_id}")
 async def delete_hours_log(log_id: str, request: Request, session_token: Optional[str] = Cookie(None)):
@@ -601,16 +706,7 @@ async def generate_invoice(
     user = await get_current_user(request, session_token)
     
     # Build query for hours logs
-    query = {"user_id": user.user_id}
-    if invoice_req.job_id:
-        query["job_id"] = invoice_req.job_id
-    if invoice_req.start_date or invoice_req.end_date:
-        date_query = {}
-        if invoice_req.start_date:
-            date_query["$gte"] = invoice_req.start_date
-        if invoice_req.end_date:
-            date_query["$lte"] = invoice_req.end_date
-        query["date"] = date_query
+    query = hours_period_query(user.user_id, invoice_req.start_date, invoice_req.end_date, invoice_req.job_id)
     
     # Fetch hours logs
     hours_logs = await db.hours_logs.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
@@ -678,7 +774,7 @@ async def generate_invoice(
     
     for log in hours_logs:
         table_data.append([
-            datetime.fromisoformat(log['date']).strftime('%m/%d/%Y') if isinstance(log['date'], str) else log['date'].strftime('%m/%d/%Y'),
+            hours_log_date_label(log),
             log['job_name'],
             str(log['hours_worked']),
             f"${log['hourly_rate']:.2f}",
@@ -998,13 +1094,14 @@ async def generate_monthly_spreadsheet(
     
     # Filter based on criteria
     if month:
-        filtered_logs = [log for log in hours_logs if log['date'].startswith(month)]
+        period_start, period_end = month_date_range(month)
+        filtered_logs = await db.hours_logs.find(hours_period_query(user.user_id, period_start, period_end), {"_id": 0}).sort("date", 1).to_list(10000)
         filtered_payments = [p for p in payments if p['date'].startswith(month)]
         month_date = datetime.strptime(month + '-01', '%Y-%m-%d')
         period_str = month_date.strftime('%B %Y')
         filename_part = month_date.strftime('%B_%Y')
     else:
-        filtered_logs = [log for log in hours_logs if start_date <= log['date'] <= end_date]
+        filtered_logs = await db.hours_logs.find(hours_period_query(user.user_id, start_date, end_date), {"_id": 0}).sort("date", 1).to_list(10000)
         filtered_payments = [p for p in payments if start_date <= p['date'] <= end_date]
         period_str = f"{start_date} to {end_date}"
         filename_part = f"{start_date}_to_{end_date}"
@@ -1070,9 +1167,8 @@ async def generate_monthly_spreadsheet(
         table_data = [['Date', 'Job', 'Hours', 'Rate', 'Amount']]
         
         for log in filtered_logs:
-            date_obj = datetime.fromisoformat(log['date']) if isinstance(log['date'], str) else log['date']
             table_data.append([
-                date_obj.strftime('%m/%d/%Y'),
+                hours_log_date_label(log),
                 log['job_name'],
                 f"{log['hours_worked']:.1f}",
                 f"${log['hourly_rate']:.2f}",
