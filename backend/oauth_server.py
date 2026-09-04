@@ -8,6 +8,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 ISSUER="https://trackyourbucks.fun"; SCOPES=["trackyourbucks:read","trackyourbucks:write","offline_access"]
 router=APIRouter(prefix="/api/oauth"); _client=AsyncIOMotorClient(os.environ["MONGO_URL"]); _db=_client[os.environ["DB_NAME"]]
 def _now(): return datetime.now(timezone.utc)
+def _expiry(value):
+    if isinstance(value, str): value = datetime.fromisoformat(value)
+    if value is not None and value.tzinfo is None: value = value.replace(tzinfo=timezone.utc)
+    return value
 def _safe_redirect(uri): p=urlparse(uri); return p.scheme=="https" and bool(p.netloc)
 def _pkce_ok(v,c): return secrets.compare_digest(base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).decode().rstrip("="),c)
 async def _issue_access(user_id,client_id,scopes):
@@ -63,13 +67,13 @@ async def authorize(request:Request,response_type:str,client_id:str,redirect_uri
 async def token(grant_type:str=Form(...),code:str|None=Form(None),redirect_uri:str|None=Form(None),client_id:str|None=Form(None),code_verifier:str|None=Form(None),refresh_token:str|None=Form(None)):
     if grant_type=="authorization_code":
         rec=await _db.oauth_codes.find_one({"code":code,"used":False})
-        if not rec or rec["expires_at"]<=_now() or rec["client_id"]!=client_id or rec["redirect_uri"]!=redirect_uri:return JSONResponse({"error":"invalid_grant"},400)
+        if not rec or _expiry(rec["expires_at"])<=_now() or rec["client_id"]!=client_id or rec["redirect_uri"]!=redirect_uri:return JSONResponse({"error":"invalid_grant"},400)
         if not code_verifier or not _pkce_ok(code_verifier,rec["code_challenge"]):return JSONResponse({"error":"invalid_grant","error_description":"PKCE verification failed"},400)
         await _db.oauth_codes.update_one({"_id":rec["_id"]},{"$set":{"used":True}}); access=await _issue_access(rec["user_id"],client_id,rec["scopes"]); refresh=secrets.token_urlsafe(48)
         await _db.oauth_refresh_tokens.insert_one({"refresh_token":refresh,"user_id":rec["user_id"],"client_id":client_id,"scopes":rec["scopes"],"expires_at":_now()+timedelta(days=30)})
         return {"access_token":access,"token_type":"Bearer","expires_in":3600,"refresh_token":refresh,"scope":" ".join(rec["scopes"])}
     if grant_type=="refresh_token":
         rec=await _db.oauth_refresh_tokens.find_one({"refresh_token":refresh_token,"client_id":client_id})
-        if not rec or rec["expires_at"]<=_now():return JSONResponse({"error":"invalid_grant"},400)
+        if not rec or _expiry(rec["expires_at"])<=_now():return JSONResponse({"error":"invalid_grant"},400)
         access=await _issue_access(rec["user_id"],client_id,rec["scopes"]); return {"access_token":access,"token_type":"Bearer","expires_in":3600,"scope":" ".join(rec["scopes"])}
     return JSONResponse({"error":"unsupported_grant_type"},400)
