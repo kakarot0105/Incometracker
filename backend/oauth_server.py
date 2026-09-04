@@ -55,7 +55,9 @@ async def authorize(request:Request,response_type:str,client_id:str,redirect_uri
         return response
     requested=[s for s in scope.split() if s in SCOPES] or [SCOPES[0]]; code=secrets.token_urlsafe(40)
     await _db.oauth_codes.insert_one({"code":code,"client_id":client_id,"redirect_uri":redirect_uri,"code_challenge":code_challenge,"user_id":user_id,"scopes":requested,"expires_at":_now()+timedelta(minutes=5),"used":False})
-    return RedirectResponse(redirect_uri+("&" if "?" in redirect_uri else "?")+urlencode({"code":code,"state":state}),302)
+    # RFC 9207: return the issuer in the authorization response. MCP OAuth
+    # clients validate it along with state before exchanging the code.
+    return RedirectResponse(redirect_uri+("&" if "?" in redirect_uri else "?")+urlencode({"code":code,"state":state,"iss":ISSUER}),302)
 @router.post("/token")
 async def token(grant_type:str=Form(...),code:str|None=Form(None),redirect_uri:str|None=Form(None),client_id:str|None=Form(None),code_verifier:str|None=Form(None),refresh_token:str|None=Form(None)):
     if grant_type=="authorization_code":
