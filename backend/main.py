@@ -32,13 +32,14 @@ class _McpNoSlash:
     claude.ai refuse to follow, so the connector cannot be added.
     """
 
-    def __init__(self, inner):
-        self.inner = inner
+    def __init__(self, app):
+        # Starlette builds middleware as cls(app=...), so the name must be `app`.
+        self.app = app
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope.get("path") == "/api/mcp":
             scope = {**scope, "path": "/api/mcp/", "raw_path": b"/api/mcp/"}
-        await self.inner(scope, receive, send)
+        await self.app(scope, receive, send)
 
 
 app.add_middleware(_McpNoSlash)
