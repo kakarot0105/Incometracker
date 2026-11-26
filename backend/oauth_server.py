@@ -12,7 +12,10 @@ def _expiry(value):
     if isinstance(value, str): value = datetime.fromisoformat(value)
     if value is not None and value.tzinfo is None: value = value.replace(tzinfo=timezone.utc)
     return value
-def _safe_redirect(uri): p=urlparse(uri); return p.scheme=="https" and bool(p.netloc)
+def _safe_redirect(uri):
+    # HTTPS anywhere, or plain HTTP on loopback for native/CLI clients (RFC 8252 s7.3)
+    p=urlparse(uri)
+    return bool(p.netloc) and (p.scheme=="https" or (p.scheme=="http" and p.hostname in ("localhost","127.0.0.1","::1")))
 def _pkce_ok(v,c): return secrets.compare_digest(base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).decode().rstrip("="),c)
 async def _issue_access(user_id,client_id,scopes):
     access=secrets.token_urlsafe(48); expires=_now()+timedelta(hours=1)
