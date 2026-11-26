@@ -10,6 +10,8 @@ export default function LoginPage() {
     update(); window.addEventListener('scroll', update, { passive: true }); window.addEventListener('resize', update);
     return () => { window.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
   }, []);
+  // An MCP client sent the user here to authorize; they need the sign-in button immediately.
+  const isConnecting = new URLSearchParams(window.location.search).get('next')?.startsWith('/api/oauth/authorize?');
   const handleGoogleLogin = () => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     if (!clientId) { toast.error('Google Client ID is not configured. Please set REACT_APP_GOOGLE_CLIENT_ID.'); return; }
@@ -20,8 +22,11 @@ export default function LoginPage() {
   };
   return <main className="bill-journey" data-testid="login-page" style={{ '--bill-progress': billProgress }}>
     <header className="bill-brand"><i>$</i>Track<span>My</span>Bucks</header>
+    <Button onClick={handleGoogleLogin} data-testid="google-login-button-top" className="bill-login bill-signin-top">Sign in <ArrowRight size={15} /></Button>
     <div className="bill-stage" aria-hidden="true"><div className="dollar-bill"><div className="bill-corner top-left">$</div><div className="bill-corner bottom-right">$</div><div className="bill-seal">TMB</div><div className="bill-portrait">$</div><p>TRACKMYBUCKS<br /><small>ONE CLEAR VIEW OF YOUR MONEY</small></p><b>01</b></div></div>
-    <section className="bill-section bill-intro"><p>MONEY, MADE VISIBLE</p><h1>Know where<br />your money goes.</h1><span>Scroll to follow the flow <ArrowDown size={14} /></span></section>
+    {isConnecting
+      ? <section className="bill-section bill-intro" data-testid="mcp-connect-intro"><p>CONNECT YOUR ASSISTANT</p><h1>Sign in to<br />connect.</h1><Button onClick={handleGoogleLogin} data-testid="google-login-button-connect" className="bill-login bill-connect">Continue with Google <ArrowRight size={17} /></Button></section>
+      : <section className="bill-section bill-intro"><p>MONEY, MADE VISIBLE</p><h1>Know where<br />your money goes.</h1><span>Scroll to follow the flow <ArrowDown size={14} /></span></section>}
     <section className="bill-section bill-middle"><p>ONE BILL. EVERY MOVE.</p><h2>Earn it.<br />Keep it.<br />Direct it.</h2></section>
     <section className="bill-section bill-end"><p>TRACKMYBUCKS</p><h2>Take control of<br />every dollar.</h2><Button onClick={handleGoogleLogin} data-testid="google-login-button" className="bill-login">Continue with Google <ArrowRight size={17} /></Button><small>MCP enabled · secure connected tracking</small></section>
   </main>;
