@@ -22,3 +22,23 @@ app.router.lifespan_context = lifespan
 app.include_router(oauth_router)
 # Keep MCP below /api so the existing Nginx /api/ reverse proxy forwards it.
 app.mount("/api/mcp", mcp_http_app)
+
+
+class _McpNoSlash:
+    """Serve /api/mcp like /api/mcp/.
+
+    The mount otherwise answers the slashless URL with a 307 to an http://
+    location (the scheme is lost behind Nginx), which MCP clients such as
+    claude.ai refuse to follow, so the connector cannot be added.
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path") == "/api/mcp":
+            scope = {**scope, "path": "/api/mcp/", "raw_path": b"/api/mcp/"}
+        await self.inner(scope, receive, send)
+
+
+app.add_middleware(_McpNoSlash)
